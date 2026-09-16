@@ -61,6 +61,25 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
     return "border-purple-600/50 hover:border-purple-400";
   };
 
+  const renderStatBar = (label: string, val: number = 5, color: string = "bg-amber-400") => {
+    return (
+      <div className="flex items-center justify-between text-xs my-1">
+        <span className="font-mono text-[10px] font-bold text-slate-400 w-14 tracking-wider">{label}</span>
+        <div className="flex gap-1 flex-1 mx-2">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div
+              key={i}
+              className={`h-2 flex-1 rounded-xs transition-all ${
+                i < val ? color : "bg-slate-800/80"
+              }`}
+            />
+          ))}
+        </div>
+        <span className="font-arcade text-xs text-white w-4 text-right font-black">{val}</span>
+      </div>
+    );
+  };
+
   return (
     <div className="flex h-screen w-screen flex-col bg-slate-950 text-slate-100 select-none overflow-hidden font-sans">
       {/* Top Header Bar */}
@@ -68,35 +87,31 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
         <div className="flex items-center gap-4">
           <button
             onClick={() => { sound.playUiClick(); onBack(); }}
-            className="rounded border border-slate-700 bg-slate-800/80 px-4 py-1.5 text-xs font-black uppercase text-slate-300 hover:bg-slate-700 active:scale-95 transition arcade-skew"
+            className="arcade-skew group flex items-center gap-2 rounded border border-slate-700 bg-slate-900 px-4 py-1.5 text-xs font-bold text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white"
           >
-            <span className="arcade-skew-reverse">← MENY</span>
+            <span className="arcade-skew-reverse flex items-center gap-1.5">
+              <span>←</span>
+              <span>TILLBAKA</span>
+            </span>
           </button>
-          <div className="arcade-skew flex items-center gap-2">
-            <span className="font-arcade text-2xl tracking-wide text-arcade-gold drop-shadow">
+          <div>
+            <h1 className="font-arcade text-2xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow">
               VÄLJ KÄMPE
-            </span>
-            <span className="text-xs font-mono font-bold text-amber-500/80 uppercase">
-              // SELECT YOUR FIGHTER
-            </span>
+            </h1>
+            <p className="text-[10px] font-bold tracking-widest text-amber-400/80 uppercase">
+              Aros IT-Partner Ultimate Tournament • Roster
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-6">
-          <div className="arcade-skew flex items-center gap-2 rounded border border-amber-500/40 bg-slate-900/90 px-3.5 py-1">
-            <span className="text-[10px] font-black uppercase text-slate-400">ARENA:</span>
-            <span className="font-arcade text-sm text-amber-400 uppercase tracking-wide">
-              {stage.name}
-            </span>
-          </div>
-
+        <div className="flex items-center gap-4">
           <button
             onClick={handleStart}
-            onMouseEnter={() => sound.playUiClick()}
-            className="arcade-skew rounded bg-gradient-to-r from-emerald-500 via-yellow-400 to-amber-500 px-10 py-2.5 shadow-[0_0_25px_rgba(234,179,8,0.6)] hover:brightness-110 active:scale-95 transition"
+            className="arcade-skew group relative overflow-hidden rounded border-2 border-emerald-400 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-500 px-8 py-2 font-arcade text-sm font-black tracking-widest text-slate-950 shadow-[0_0_25px_rgba(16,185,129,0.4)] transition hover:scale-105 hover:brightness-110 active:scale-95 cursor-pointer"
           >
-            <span className="arcade-skew-reverse font-arcade text-lg font-black tracking-wider text-slate-950 drop-shadow">
-              STARTA STRID!
+            <span className="arcade-skew-reverse flex items-center gap-2 text-white drop-shadow">
+              <span>STARTA STRID!</span>
+              <span>➔</span>
             </span>
           </button>
         </div>
@@ -120,7 +135,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
             </div>
 
             {/* Fighter Portrait Banner */}
-            <div className="relative mt-4 flex h-28 w-full items-center justify-center overflow-hidden rounded-xl border border-blue-500/40 bg-gradient-to-tr from-blue-950 via-slate-900 to-blue-900/50 shadow-inner">
+            <div className="relative mt-3 flex h-24 w-full items-center justify-center overflow-hidden rounded-xl border border-blue-500/40 bg-gradient-to-tr from-blue-950 via-slate-900 to-blue-900/50 shadow-inner">
               <div
                 className="absolute inset-0 opacity-20"
                 style={{ backgroundColor: p1Char.colors[0] }}
@@ -129,7 +144,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
                 {p1Char.name.charAt(0)}
               </span>
               <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between">
-                <span className="font-arcade text-2xl font-black text-white drop-shadow">
+                <span className="font-arcade text-xl font-black text-white drop-shadow">
                   {p1Char.name}
                 </span>
                 <span className={`rounded border px-2 py-0.5 text-[9px] font-black uppercase ${getArchetypeBadgeColor(p1Char.archetype)}`}>
@@ -138,37 +153,39 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
               </div>
             </div>
 
-            <p className="mt-3 text-xs text-slate-300 leading-relaxed italic">
-              "{p1Char.blurb}"
+            {p1Char.tagline && (
+              <div className="text-[11px] font-bold text-amber-400 tracking-wider uppercase mt-2">
+                ★ {p1Char.tagline} ★
+              </div>
+            )}
+
+            <p className="mt-2 text-xs text-slate-300 leading-relaxed italic">
+              "{p1Char.playstyle || p1Char.blurb}"
             </p>
 
-            {/* Attributes Grid */}
-            <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[10px] font-bold">
-              <div className="rounded bg-slate-900/80 p-2 border border-slate-800">
-                <span className="text-slate-400 block text-[9px]">FART</span>
-                <span className="font-arcade text-sm text-cyan-300">{p1Char.walkSpeed}</span>
-              </div>
-              <div className="rounded bg-slate-900/80 p-2 border border-slate-800">
-                <span className="text-slate-400 block text-[9px]">VIKT</span>
-                <span className="font-arcade text-sm text-yellow-300">{p1Char.weight}</span>
-              </div>
-              <div className="rounded bg-slate-900/80 p-2 border border-slate-800">
-                <span className="text-slate-400 block text-[9px]">KAST</span>
-                <span className="font-arcade text-sm text-rose-300">{p1Char.throwDamage}</span>
-              </div>
+            {/* Stat Bars: POWER, SPEED, RANGE */}
+            <div className="mt-3 rounded-lg bg-slate-900/90 p-2.5 border border-slate-800">
+              {renderStatBar("POWER", p1Char.power ?? 7, "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]")}
+              {renderStatBar("SPEED", p1Char.speed ?? 7, "bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.6)]")}
+              {renderStatBar("RANGE", p1Char.range ?? 6, "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]")}
             </div>
           </div>
 
-          {/* Tactical Advice */}
+          {/* Moveset Payoffs */}
           <div className="space-y-2 text-xs">
-            <div className="rounded-lg bg-slate-900/70 p-2.5 border border-slate-800/80">
-              <span className="font-black text-emerald-400 text-[10px] uppercase block">Styrkor:</span>
-              <span className="text-slate-300 text-[11px]">{p1Char.strengths.join(", ")}</span>
+            <div className="rounded-lg bg-slate-900/80 p-2 border border-slate-800">
+              <span className="font-black text-amber-400 text-[10px] uppercase block tracking-wider">SIGNATURE MOVE</span>
+              <span className="font-arcade text-white text-xs block mt-0.5">{p1Char.signature || p1Char.normals.special1}</span>
             </div>
-            <div className="rounded-lg bg-slate-900/70 p-2.5 border border-slate-800/80">
-              <span className="font-black text-yellow-400 text-[10px] uppercase block">Combo:</span>
-              <span className="text-slate-300 text-[11px]">{p1Char.combo}</span>
+            <div className="rounded-lg bg-slate-900/80 p-2 border border-rose-900/40 bg-rose-950/20">
+              <span className="font-black text-rose-400 text-[10px] uppercase block tracking-wider">SUPER MOVE</span>
+              <span className="font-arcade text-yellow-300 text-xs block mt-0.5">{p1Char.superName || p1Char.normals.super}</span>
             </div>
+            {p1Char.voiceBarks?.special && (
+              <div className="rounded-lg bg-blue-950/40 p-1.5 border border-blue-800/40 text-center">
+                <span className="text-[10px] font-mono italic text-blue-300">"{p1Char.voiceBarks.special}"</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -299,7 +316,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
             </div>
 
             {/* Fighter Portrait Banner P2 */}
-            <div className="relative mt-4 flex h-28 w-full items-center justify-center overflow-hidden rounded-xl border border-rose-500/40 bg-gradient-to-tl from-rose-950 via-slate-900 to-rose-900/50 shadow-inner">
+            <div className="relative mt-3 flex h-24 w-full items-center justify-center overflow-hidden rounded-xl border border-rose-500/40 bg-gradient-to-tl from-rose-950 via-slate-900 to-rose-900/50 shadow-inner">
               <div
                 className="absolute inset-0 opacity-20"
                 style={{ backgroundColor: p2Char.colors[0] }}
@@ -308,7 +325,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
                 {p2Char.name.charAt(0)}
               </span>
               <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between flex-row-reverse">
-                <span className="font-arcade text-2xl font-black text-white drop-shadow">
+                <span className="font-arcade text-xl font-black text-white drop-shadow">
                   {p2Char.name}
                 </span>
                 <span className={`rounded border px-2 py-0.5 text-[9px] font-black uppercase ${getArchetypeBadgeColor(p2Char.archetype)}`}>
@@ -317,37 +334,39 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
               </div>
             </div>
 
-            <p className="mt-3 text-xs text-slate-300 leading-relaxed italic">
-              "{p2Char.blurb}"
+            {p2Char.tagline && (
+              <div className="text-[11px] font-bold text-amber-400 tracking-wider uppercase mt-2">
+                ★ {p2Char.tagline} ★
+              </div>
+            )}
+
+            <p className="mt-2 text-xs text-slate-300 leading-relaxed italic">
+              "{p2Char.playstyle || p2Char.blurb}"
             </p>
 
-            {/* Attributes Grid P2 */}
-            <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[10px] font-bold">
-              <div className="rounded bg-slate-900/80 p-2 border border-slate-800">
-                <span className="text-slate-400 block text-[9px]">FART</span>
-                <span className="font-arcade text-sm text-cyan-300">{p2Char.walkSpeed}</span>
-              </div>
-              <div className="rounded bg-slate-900/80 p-2 border border-slate-800">
-                <span className="text-slate-400 block text-[9px]">VIKT</span>
-                <span className="font-arcade text-sm text-yellow-300">{p2Char.weight}</span>
-              </div>
-              <div className="rounded bg-slate-900/80 p-2 border border-slate-800">
-                <span className="text-slate-400 block text-[9px]">KAST</span>
-                <span className="font-arcade text-sm text-rose-300">{p2Char.throwDamage}</span>
-              </div>
+            {/* Stat Bars: POWER, SPEED, RANGE */}
+            <div className="mt-3 rounded-lg bg-slate-900/90 p-2.5 border border-slate-800 text-left">
+              {renderStatBar("POWER", p2Char.power ?? 7, "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]")}
+              {renderStatBar("SPEED", p2Char.speed ?? 7, "bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.6)]")}
+              {renderStatBar("RANGE", p2Char.range ?? 6, "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]")}
             </div>
           </div>
 
-          {/* Tactical Advice P2 */}
-          <div className="space-y-2 text-xs">
-            <div className="rounded-lg bg-slate-900/70 p-2.5 border border-slate-800/80">
-              <span className="font-black text-emerald-400 text-[10px] uppercase block">Styrkor:</span>
-              <span className="text-slate-300 text-[11px]">{p2Char.strengths.join(", ")}</span>
+          {/* Moveset Payoffs P2 */}
+          <div className="space-y-2 text-xs text-left">
+            <div className="rounded-lg bg-slate-900/80 p-2 border border-slate-800">
+              <span className="font-black text-amber-400 text-[10px] uppercase block tracking-wider">SIGNATURE MOVE</span>
+              <span className="font-arcade text-white text-xs block mt-0.5">{p2Char.signature || p2Char.normals.special1}</span>
             </div>
-            <div className="rounded-lg bg-slate-900/70 p-2.5 border border-slate-800/80">
-              <span className="font-black text-yellow-400 text-[10px] uppercase block">Combo:</span>
-              <span className="text-slate-300 text-[11px]">{p2Char.combo}</span>
+            <div className="rounded-lg bg-slate-900/80 p-2 border border-rose-900/40 bg-rose-950/20">
+              <span className="font-black text-rose-400 text-[10px] uppercase block tracking-wider">SUPER MOVE</span>
+              <span className="font-arcade text-yellow-300 text-xs block mt-0.5">{p2Char.superName || p2Char.normals.super}</span>
             </div>
+            {p2Char.voiceBarks?.special && (
+              <div className="rounded-lg bg-rose-950/40 p-1.5 border border-rose-800/40 text-center">
+                <span className="text-[10px] font-mono italic text-rose-300">"{p2Char.voiceBarks.special}"</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

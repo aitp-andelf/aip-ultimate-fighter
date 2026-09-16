@@ -158,11 +158,11 @@ describe("packages/sim", () => {
     state.fighters[0].x = 0;
     state.fighters[1].x = 80;
 
-    // P1 executes a move with chip damage, e.g. escalation_dp
-    const dp = SHOTO_A.moves["escalation_dp"]!;
+    // P1 executes a move with chip damage, e.g. spade_uppercut
+    const dp = SHOTO_A.moves["spade_uppercut"]!;
     expect(dp.chip).toBeGreaterThan(0);
 
-    state.fighters[0].moveId = "escalation_dp";
+    state.fighters[0].moveId = "spade_uppercut";
     state.fighters[0].state = "attackActive";
     state.fighters[0].attackAge = dp.startup;
 

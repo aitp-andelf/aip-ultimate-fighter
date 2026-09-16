@@ -137,6 +137,18 @@ export interface CharacterDef {
   animationProfileId: string;
   colors: [string, string];
   modelUrl?: string;
+  tagline?: string;
+  power?: number; // 1 to 10
+  speed?: number; // 1 to 10
+  range?: number; // 1 to 10
+  signature?: string;
+  superName?: string;
+  playstyle?: string;
+  voiceBarks?: {
+    special?: string;
+    super?: string;
+    win?: string;
+  };
 }
 
 export interface StageLayer {

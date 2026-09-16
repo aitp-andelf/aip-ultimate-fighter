@@ -68,7 +68,13 @@ export class GameRenderer {
   private fighter1: LoadedFighterState;
 
   // Projectiles
-  private projectilePool: Array<{ core: THREE.Mesh; aura: THREE.Mesh; group: THREE.Group }> = [];
+  private projectilePool: Array<{
+    core: THREE.Mesh;
+    aura: THREE.Mesh;
+    ring: THREE.Mesh;
+    group: THREE.Group;
+    light: THREE.PointLight;
+  }> = [];
 
   // VFX
   private sparkGroup: THREE.Group;
@@ -550,8 +556,16 @@ export class GameRenderer {
       this.bgMeshBack.position.x = this.camera.position.x * 0.12;
     }
 
-    // Render projectiles
-    this.renderProjectiles(state.projectiles);
+    // Render projectiles with signature character styling
+    this.renderProjectiles(state.projectiles, state.chars);
+
+    // Subtle full-meter aura sparks
+    if (f0.meter >= 1000 && Math.random() < 0.35) {
+      this.spawnSparks(pos0X + (Math.random() - 0.5) * 0.35, pos0Y + 0.15, 0xf59e0b, 1, 0.05);
+    }
+    if (f1.meter >= 1000 && Math.random() < 0.35) {
+      this.spawnSparks(pos1X + (Math.random() - 0.5) * 0.35, pos1Y + 0.15, 0xf59e0b, 1, 0.05);
+    }
 
     // Process simulation events (hits, blocks, supers, knockouts)
     for (const ev of state.events) {
@@ -573,10 +587,46 @@ export class GameRenderer {
         this.screenShake = Math.max(this.screenShake, 0.04);
       } else if (ev.kind === "super") {
         const user = ev.source === 0 ? f0 : f1;
+        const char = state.chars[ev.source];
+        const charId = char ? char.id : "shoto-a";
         const ux = user.x / 1000;
         const uy = user.y / 1000 + 1.0;
-        this.spawnSparks(ux, uy, 0xa855f7, 32, 0.22);
-        this.spawnSparks(ux, uy, 0xec4899, 20, 0.16);
+
+        // Character-specific signature super burst
+        if (charId === "grappler-a") {
+          // Capitan Hulk Mode Super (Blue Thunder Ground Shockwaves)
+          this.spawnSparks(ux, uy, 0x1d4ed8, 40, 0.28);
+          this.spawnSparks(ux, uy, 0x60a5fa, 25, 0.20);
+        } else if (charId === "shoto-a") {
+          // Irstababben Irsta Speciale (Pizza Oven Inferno Burst)
+          this.spawnSparks(ux, uy, 0xf59e0b, 40, 0.26);
+          this.spawnSparks(ux, uy, 0xef4444, 25, 0.20);
+        } else if (charId === "grappler-b") {
+          // Babas Perfect Vision (Surgical Laser Flash)
+          this.spawnSparks(ux, uy, 0xe11d48, 40, 0.30);
+          this.spawnSparks(ux, uy, 0xffffff, 25, 0.25);
+        } else if (charId === "zoner-a") {
+          // Femboyfippe OVERDRIVE (High Voltage Cyan Cascade)
+          this.spawnSparks(ux, uy, 0x06b6d4, 40, 0.26);
+          this.spawnSparks(ux, uy, 0x38bdf8, 25, 0.20);
+        } else if (charId === "zoner-b") {
+          // Stinkfiend BIOHAZARD (Noxious Venom Cloud)
+          this.spawnSparks(ux, uy, 0x84cc16, 40, 0.22);
+          this.spawnSparks(ux, uy, 0x15803d, 25, 0.18);
+        } else if (charId === "shoto-b") {
+          // Goonström MAXIMUM GOON (Abyssal Void Shockwave)
+          this.spawnSparks(ux, uy, 0x581c87, 40, 0.28);
+          this.spawnSparks(ux, uy, 0xd946ef, 25, 0.22);
+        } else if (charId === "hybrid-a") {
+          // Ekander TERMINAL VELOCITY (Kinetic Momentum Blast)
+          this.spawnSparks(ux, uy, 0x7c3aed, 40, 0.26);
+          this.spawnSparks(ux, uy, 0xc084fc, 25, 0.20);
+        } else {
+          // Bulgarian Copper Thief THE GRID IS MINE (Electrified Copper Arc Storm)
+          this.spawnSparks(ux, uy, 0xd97706, 40, 0.26);
+          this.spawnSparks(ux, uy, 0x14b8a6, 25, 0.20);
+        }
+
         this.screenShake = Math.max(this.screenShake, 0.35);
         this.triggerImpactFlash(0.65);
         this.hitFreezeFrames = 6;
@@ -607,16 +657,17 @@ export class GameRenderer {
     if (fighter.isGltfLoaded && fighter.mixer) {
       // Drive skeletal animation mixer
       fighter.mixer.update(dt);
-      this.playRiggedAnimation(fighter, runtime.state);
+      this.playRiggedAnimation(fighter, runtime.state, runtime.moveId);
     } else if (fighter.proceduralParts) {
       // Fallback: drive procedural skeleton
       this.poseProceduralFighter(fighter.proceduralParts, runtime);
     }
   }
 
-  private playRiggedAnimation(fighter: LoadedFighterState, state: string): void {
-    if (fighter.currentState === state) return;
-    fighter.currentState = state;
+  private playRiggedAnimation(fighter: LoadedFighterState, state: string, moveId: string | null = null): void {
+    const stateKey = `${state}:${moveId || ""}`;
+    if (fighter.currentState === stateKey) return;
+    fighter.currentState = stateKey;
 
     const findAction = (...names: string[]) => {
       for (const name of names) {
@@ -657,10 +708,23 @@ export class GameRenderer {
         break;
       case "attackStartup":
       case "attackActive":
-      case "attackRecovery":
-        targetAction = findAction("punch", "agree", "running");
-        timeScale = 1.4;
+      case "attackRecovery": {
+        const move = moveId || "";
+        const isKick = move === "lk" || move === "hk" || move.includes("kick") || move.includes("stomp") || move.includes("sweep") || move.includes("boot") || move.includes("shin") || move.includes("heel");
+        const isSuper = move.includes("super") || move.includes("overdrive") || move.includes("biohazard") || move.includes("velocity") || move.includes("grid");
+
+        if (isSuper) {
+          targetAction = findAction("thumbsup", "dance", "agree", "punch");
+          timeScale = 1.6;
+        } else if (isKick) {
+          targetAction = findAction("running", "walkjump", "jump", "punch");
+          timeScale = 1.7;
+        } else {
+          targetAction = findAction("punch", "agree", "running");
+          timeScale = 1.5;
+        }
         break;
+      }
       case "hitstun":
         targetAction = findAction("no", "headshake");
         timeScale = 1.5;
@@ -941,52 +1005,154 @@ export class GameRenderer {
         break;
       }
       case "attackStartup": {
-        parts.torso.rotation.z = -0.2;
-        parts.rightArm.rotation.z = -0.6;
-        parts.rightForearm.rotation.z = -0.9;
+        const move = fighter.moveId || "";
+        const isKick = move === "lk" || move === "hk" || move.includes("kick") || move.includes("stomp") || move.includes("sweep") || move.includes("boot") || move.includes("shin") || move.includes("heel");
+        const isHeavy = move === "hp" || move === "hk" || move.includes("hammer") || move.includes("smash") || move.includes("axe") || move.includes("haymaker");
+
+        if (isKick) {
+          parts.torso.rotation.z = -0.2;
+          parts.rightLeg.rotation.z = -0.4;
+          parts.rightShin.rotation.z = -0.8;
+          parts.rightArm.rotation.z = 0.5;
+          parts.leftArm.rotation.z = 0.4;
+        } else {
+          parts.torso.rotation.z = isHeavy ? -0.4 : -0.2;
+          parts.rightArm.rotation.z = isHeavy ? -0.9 : -0.6;
+          parts.rightForearm.rotation.z = -0.9;
+        }
         break;
       }
       case "attackActive": {
-        parts.torso.rotation.z = 0.35;
-        parts.rightArm.rotation.z = 1.5;
-        parts.rightForearm.rotation.z = 0.1;
-        parts.leftArm.rotation.z = -0.4;
-        parts.leftLeg.rotation.z = -0.4;
-        parts.rightLeg.rotation.z = 0.5;
+        const move = fighter.moveId || "";
+        const isKickA = move === "lk";
+        const isKickB = move === "hk" || move.includes("kick") || move.includes("stomp") || move.includes("sweep") || move.includes("boot") || move.includes("shin") || move.includes("heel");
+        const isPunchA = move === "lp";
+        const isPunchB = move === "hp" || move.includes("hammer") || move.includes("smash") || move.includes("backhand") || move.includes("haymaker") || move.includes("slap");
+        const isThrow = move === "throw" || move.includes("grab") || move.includes("suplex");
+        const isSuper = move.includes("super") || move.includes("overdrive") || move.includes("biohazard") || move.includes("velocity") || move.includes("grid");
+
+        if (fighter.airborne) {
+          // Air attack: Dynamic aerial dive/kick
+          parts.torso.rotation.z = 0.35;
+          parts.rightLeg.rotation.z = 1.3;
+          parts.rightShin.rotation.z = 0.2;
+          parts.leftLeg.rotation.z = -0.7;
+          parts.leftShin.rotation.z = -0.9;
+          parts.rightArm.rotation.z = 1.2;
+          parts.leftArm.rotation.z = -0.5;
+        } else if (isThrow) {
+          // Grapple / Command Grab: Both hands lunging forward
+          parts.torso.rotation.z = 0.35;
+          parts.rightArm.rotation.z = 1.4;
+          parts.rightForearm.rotation.z = 0.3;
+          parts.leftArm.rotation.z = 1.3;
+          parts.leftForearm.rotation.z = 0.3;
+          parts.rightLeg.rotation.z = 0.4;
+          parts.leftLeg.rotation.z = -0.4;
+        } else if (isSuper) {
+          // Super Arts: Full-body explosive kinetic surge
+          parts.torso.rotation.z = 0.4;
+          parts.head.rotation.z = -0.2;
+          parts.rightArm.rotation.z = 1.6;
+          parts.rightForearm.rotation.z = 0.1;
+          parts.leftArm.rotation.z = -0.8;
+          parts.leftForearm.rotation.z = -0.6;
+          parts.rightLeg.rotation.z = 0.6;
+          parts.leftLeg.rotation.z = -0.7;
+        } else if (isKickB) {
+          // Kick B (Heavy): High sweeping roundhouse / axe kick
+          parts.torso.rotation.z = -0.25;
+          parts.rightLeg.rotation.z = 1.7;
+          parts.rightShin.rotation.z = 0.2;
+          parts.leftLeg.rotation.z = -0.4;
+          parts.leftShin.rotation.z = -0.6;
+          parts.rightArm.rotation.z = -0.4;
+          parts.leftArm.rotation.z = 0.8;
+        } else if (isKickA) {
+          // Kick A (Fast): Snapping low/mid poke
+          parts.torso.rotation.z = -0.12;
+          parts.rightLeg.rotation.z = 1.15;
+          parts.rightShin.rotation.z = 0.1;
+          parts.leftLeg.rotation.z = -0.3;
+          parts.leftShin.rotation.z = -0.3;
+          parts.rightArm.rotation.z = 0.6;
+          parts.leftArm.rotation.z = 0.7;
+        } else if (isPunchB) {
+          // Punch B (Heavy): Heavy overhead smash / hammer / haymaker
+          parts.torso.rotation.z = 0.55;
+          parts.rightArm.rotation.z = 1.7;
+          parts.rightForearm.rotation.z = -0.15;
+          parts.leftArm.rotation.z = -0.6;
+          parts.leftForearm.rotation.z = -0.5;
+          parts.rightLeg.rotation.z = 0.6;
+          parts.leftLeg.rotation.z = -0.6;
+        } else {
+          // Punch A (Fast): Clean straight jab
+          parts.torso.rotation.z = 0.2;
+          parts.rightArm.rotation.z = 1.45;
+          parts.rightForearm.rotation.z = 0.05;
+          parts.leftArm.rotation.z = 0.7;
+          parts.leftForearm.rotation.z = -1.2;
+          parts.rightLeg.rotation.z = 0.35;
+          parts.leftLeg.rotation.z = -0.35;
+        }
         break;
       }
       case "attackRecovery": {
-        parts.torso.rotation.z = 0.1;
-        parts.rightArm.rotation.z = 0.8;
-        parts.rightForearm.rotation.z = -0.6;
+        const move = fighter.moveId || "";
+        const isKick = move === "lk" || move === "hk" || move.includes("kick") || move.includes("stomp") || move.includes("sweep") || move.includes("boot") || move.includes("shin") || move.includes("heel");
+        if (isKick) {
+          parts.torso.rotation.z = -0.05;
+          parts.rightLeg.rotation.z = 0.5;
+          parts.rightShin.rotation.z = -0.4;
+          parts.leftLeg.rotation.z = -0.2;
+        } else {
+          parts.torso.rotation.z = 0.1;
+          parts.rightArm.rotation.z = 0.8;
+          parts.rightForearm.rotation.z = -0.6;
+        }
         break;
       }
     }
   }
 
-  // --- Projectiles with Energy Glow ---
+  // --- Projectiles with Energy Glow & Signature VFX ---
 
-  private renderProjectiles(projectiles: ProjectileRuntime[]): void {
+  private renderProjectiles(projectiles: ProjectileRuntime[], chars: [CharacterDef, CharacterDef]): void {
     while (this.projectilePool.length < projectiles.length) {
       const group = new THREE.Group();
 
-      const coreGeo = new THREE.SphereGeometry(0.18, 12, 12);
+      const coreGeo = new THREE.SphereGeometry(0.18, 14, 14);
       const coreMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
       const core = new THREE.Mesh(coreGeo, coreMat);
       group.add(core);
 
-      const auraGeo = new THREE.SphereGeometry(0.28, 12, 12);
+      const auraGeo = new THREE.SphereGeometry(0.32, 14, 14);
       const auraMat = new THREE.MeshBasicMaterial({
         color: 0x0284c7,
         transparent: true,
-        opacity: 0.45,
+        opacity: 0.55,
         blending: THREE.AdditiveBlending,
       });
       const aura = new THREE.Mesh(auraGeo, auraMat);
       group.add(aura);
 
+      const ringGeo = new THREE.TorusGeometry(0.35, 0.04, 8, 20);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0x67e8f9,
+        transparent: true,
+        opacity: 0.65,
+        blending: THREE.AdditiveBlending,
+      });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = Math.PI / 2;
+      group.add(ring);
+
+      const light = new THREE.PointLight(0x38bdf8, 2.5, 3.5);
+      group.add(light);
+
       this.scene.add(group);
-      this.projectilePool.push({ core, aura, group });
+      this.projectilePool.push({ core, aura, ring, group, light });
     }
 
     for (let i = 0; i < this.projectilePool.length; i++) {
@@ -996,17 +1162,127 @@ export class GameRenderer {
         entry.group.visible = true;
         entry.group.position.set(p.x / 1000, p.y / 1000, 0.1);
 
-        if (p.kind === "zone") {
-          entry.core.scale.set(1.4, 2.6, 0.6);
-          entry.aura.scale.set(1.8, 3.2, 0.9);
-          (entry.core.material as THREE.MeshBasicMaterial).color.setHex(0xf59e0b);
-          (entry.aura.material as THREE.MeshBasicMaterial).color.setHex(0xd97706);
+        const ownerChar = chars[p.owner];
+        const charId = ownerChar ? ownerChar.id : "shoto-a";
+
+        let coreColor = 0x38bdf8;
+        let auraColor = 0x0284c7;
+        let ringColor = 0x67e8f9;
+        let lightColor = 0x38bdf8;
+
+        if (charId === "shoto-a") {
+          // Irstababben: Hawaii Pineapple Blast & Oven Fire
+          coreColor = 0xf97316;
+          auraColor = 0xfde047;
+          ringColor = 0xf59e0b;
+          lightColor = 0xf97316;
+          entry.core.scale.set(1.2, 1.2, 1.2);
+          entry.aura.scale.set(1.6, 1.6, 1.6);
+          entry.ring.scale.set(1.4, 1.4, 1.4);
+          entry.group.rotation.z += 0.25;
+          if (p.life % 3 === 0) {
+            this.spawnSparks(p.x / 1000, p.y / 1000, 0xfbbf24, 2, 0.05);
+          }
+        } else if (charId === "grappler-b") {
+          // Babas: LASIK Laser Beam (horizontally stretched needle-thin laser)
+          coreColor = 0xffffff;
+          auraColor = 0xe11d48;
+          ringColor = 0x06b6d4;
+          lightColor = 0xf43f5e;
+          entry.core.scale.set(2.8, 0.3, 0.3);
+          entry.aura.scale.set(3.4, 0.55, 0.55);
+          entry.ring.scale.set(0.6, 0.6, 0.6);
+          if (p.life % 2 === 0) {
+            this.spawnSparks(p.x / 1000, p.y / 1000, 0xe11d48, 2, 0.06);
+          }
+        } else if (charId === "zoner-a") {
+          // Femboyfippe: Cardiac Grid Electric Node
+          coreColor = 0x22d3ee;
+          auraColor = 0x38bdf8;
+          ringColor = 0xa855f7;
+          lightColor = 0x06b6d4;
+          entry.core.scale.set(1.0, 1.0, 1.0);
+          entry.aura.scale.set(1.4, 1.4, 1.4);
+          entry.ring.scale.set(1.8, 1.8, 1.8);
+          entry.ring.rotation.y += 0.3;
+          if (p.life % 3 === 0) {
+            this.spawnSparks(p.x / 1000, p.y / 1000, 0x22d3ee, 3, 0.08);
+          }
+        } else if (charId === "zoner-b") {
+          // Stinkfiend: Silent But Deadly Biohazard Poison Cloud
+          coreColor = 0x84cc16;
+          auraColor = 0x22c55e;
+          ringColor = 0x15803d;
+          lightColor = 0x84cc16;
+          entry.core.scale.set(1.6, 1.6, 1.2);
+          entry.aura.scale.set(2.4, 2.4, 1.5);
+          entry.ring.scale.set(1.6, 1.6, 1.6);
+          if (p.life % 3 === 0) {
+            this.spawnSparks(p.x / 1000, p.y / 1000 + 0.1, 0x84cc16, 2, 0.03);
+          }
+        } else if (charId === "shoto-b") {
+          // Goonström: Goon Blast (Abyssal Dark Purple & Magenta Void)
+          coreColor = 0x3b0764;
+          auraColor = 0xd946ef;
+          ringColor = 0x7e22ce;
+          lightColor = 0xa855f7;
+          entry.core.scale.set(1.3, 1.3, 1.3);
+          entry.aura.scale.set(1.8, 1.8, 1.8);
+          entry.ring.scale.set(1.5, 1.5, 1.5);
+          if (p.life % 3 === 0) {
+            this.spawnSparks(p.x / 1000, p.y / 1000, 0xd946ef, 3, 0.06);
+          }
+        } else if (charId === "hybrid-a") {
+          // Ekander: Ekander Roll / Kinetic Mass
+          coreColor = 0x7c3aed;
+          auraColor = 0xc084fc;
+          ringColor = 0xa855f7;
+          lightColor = 0x8b5cf6;
+          entry.core.scale.set(1.5, 1.5, 1.5);
+          entry.aura.scale.set(1.9, 1.9, 1.9);
+          entry.ring.scale.set(1.6, 1.6, 1.6);
+          entry.group.rotation.z += p.facing * 0.3;
+          if (p.life % 3 === 0) {
+            this.spawnSparks(p.x / 1000, p.y / 1000, 0xa855f7, 2, 0.05);
+          }
+        } else if (charId === "hybrid-b") {
+          // Bulgarian Copper Thief: Copper Wire / Lightning Strike
+          coreColor = 0xea580c;
+          auraColor = 0x14b8a6;
+          ringColor = 0xf59e0b;
+          lightColor = 0x2dd4bf;
+          entry.core.scale.set(1.4, 1.4, 1.4);
+          entry.aura.scale.set(1.8, 1.8, 1.8);
+          entry.ring.scale.set(1.6, 1.6, 1.6);
+          if (p.life % 3 === 0) {
+            this.spawnSparks(p.x / 1000, p.y / 1000, 0x14b8a6, 2, 0.07);
+            this.spawnSparks(p.x / 1000, p.y / 1000, 0xea580c, 1, 0.06);
+          }
         } else {
-          entry.core.scale.set(1, 1, 1);
-          entry.aura.scale.set(1.3, 1.3, 1.3);
-          (entry.core.material as THREE.MeshBasicMaterial).color.setHex(0x38bdf8);
-          (entry.aura.material as THREE.MeshBasicMaterial).color.setHex(0x0284c7);
+          // Capitan: Blue Thunder Ground Shockwave
+          coreColor = 0x1d4ed8;
+          auraColor = 0x60a5fa;
+          ringColor = 0x3b82f6;
+          lightColor = 0x60a5fa;
+          entry.core.scale.set(1.5, 1.5, 1.5);
+          entry.aura.scale.set(2.0, 2.0, 2.0);
+          entry.ring.scale.set(2.0, 2.0, 2.0);
+          if (p.life % 3 === 0) {
+            this.spawnSparks(p.x / 1000, p.y / 1000, 0x60a5fa, 3, 0.07);
+          }
         }
+
+        // Zone specialization: Towering ground hazard barrier
+        if (p.kind === "zone") {
+          entry.core.scale.set(1.5, 3.2, 0.8);
+          entry.aura.scale.set(2.0, 3.8, 1.2);
+          entry.ring.scale.set(2.2, 2.2, 2.2);
+        }
+
+        (entry.core.material as THREE.MeshBasicMaterial).color.setHex(coreColor);
+        (entry.aura.material as THREE.MeshBasicMaterial).color.setHex(auraColor);
+        (entry.ring.material as THREE.MeshBasicMaterial).color.setHex(ringColor);
+        entry.light.color.setHex(lightColor);
       } else {
         entry.group.visible = false;
       }
