@@ -21,18 +21,32 @@ Status: Aktiv utveckling. Kanoniskt karaktärsgalleri (8 kämpar) med fullständ
 - `apps/web`:
   - **Arkadstyling**: Russo One och Teko typsnitt, polygon-klippta knappar, neonglöd, metalliska färgtoner.
   - **Karaktärsväljare**: Detaljerade kämpekort med Power, Speed, Range visual bars (1-10), signaturanfall, superpayoffs, taglines och arkad-röstbarks.
-  - **Matchrendering (Three.js)**: Differentierade attackposer för Kick A (snabb poke), Kick B (hög axe/roundhouse), Punch A (snabb jab), Punch B (tung hammer/smash), kommandokast och super.
+  - **Matchrendering (Three.js)**: Full 2.5D Street Fighter-inramning kalibrerad (`WORLD_SCALE = 1 / 200`, 2.05m heroisk kämpehöjd, kämpar roterade så de möter varandra i profil). Dynamisk kamera som spårar mittpunkt, distans och hopp.
+  - **Turnégolv & Belysning**: Högupplöst reflekterande arenagolv med Aros IT-Partner-emblem, rutmönster, neongränser för arenaväggarna och dynamisk spotlight.
   - **Signatur-VFX & Projektiler**: Karaktärsspecifika projektiler och effekter (Irstababbens Hawaii-eldboll, Babas kirurgiska LASIK-laserstråle, Femboyfippes cyan-elektriska nät, Stinkfiends gröna giftmoln, Goonströms mörka magenta-void, Ekanders rullande klot, Bulgarian Copper Thiefs kopparblixtar och Capitans blå markchockvågor).
   - **Character Lab**: 3D-modellinspektion i realtid med animationsbläddrare och dra-och-släpp `.glb`-uppladdning direkt i webbläsaren.
   - **Ljud**: Syntetiserad röstannouncer ("FIGHT!", "K.O.!"), slag- och blockeffekter, BGM.
 - `tools/assets`: Character Lab CLI-importör (`pnpm import-character`). 2/2 enhetstester passerar. Byggd och typcheckad.
-- `tests/e2e`: 4/4 Playwright-tester passerar i systemets Google Chrome (Lokal match, Träningsläge, Online multiplayer 1v1 med åskådare, SharePoint-läge).
+- `tests/e2e`: 6/6 Playwright-tester passerar i systemets Google Chrome:
+  1. Full gameplay verification: val av kämpar, nedräkning, förflyttning, slag/sparkar, skador/hälsoavdrag, super meters, superangrepp och K.O.-seger.
+  2. Träningsläge med dojo-kontroller och 3D-hitboxvisualiserare.
+  3. Lokal 2-spelarmatch med kämpeval och HUD.
+  4. Träningsläge dummy-kontroller.
+  5. Online 1v1 multiplayer via Colyseus-server med åskådare.
+  6. SharePoint-läge med ?sharepoint=1 inbäddning.
 
 ## Verifiering
 
-- `pnpm build`: Bygger alla paket utan fel.
+- `pnpm build`: Bygger alla 6 paket utan fel.
 - `pnpm test`: 19/19 enhets- och integrationstester passerar.
-- `pnpm test:e2e`: 4/4 webbläsartester passerar i Google Chrome.
+- `pnpm test:e2e`: 6/6 webbläsartester passerar i Google Chrome.
+- **Skärmdumpar fångade som bevis**:
+  - `gameplay_01_character_select.png`: Galleri med alla 8 unika kämpar, stats och signaturdrag.
+  - `gameplay_02_round_start.png`: Matchstart med 3D-arenagolv, "STRID!"-announcer och fullstora kämpar i profil.
+  - `gameplay_03_combat_action.png`: Aktiv strid, träffar, slag/spark-animering och minskande livmätare.
+  - `gameplay_04_super_move.png`: Super meter-laddning och super move payoff.
+  - `gameplay_05_knockout.png`: Knockout, motståndare utslagen, segerannouncer "SPELARE 1 VINNER!".
+  - `gameplay_06_dojo_hitboxes.png`: Dojoläge med 3D-hitboxar och hurtboxar i exakt kämpeproportion.
 
 ## Nästa planerade steg (Scope & Polish)
 
