@@ -1,0 +1,39 @@
+{
+  "id": "shoto-a",
+  "name": "Helpdesk Champion",
+  "archetype": "shoto-a",
+  "blurb": "Uppdaterad Helpdesk-karaktär med anpassade modeller från Character Lab.",
+  "definition": {
+    "walkSpeed": 36,
+    "jumpVy": 110,
+    "pushbox": { "x": -80, "y": 0, "w": 160, "h": 420 },
+    "moves": {
+      "lp": {
+        "id": "lp",
+        "name": "Snabb jab",
+        "startup": 4,
+        "active": 3,
+        "recovery": 6,
+        "damage": 38,
+        "hitstun": 12,
+        "blockstun": 9,
+        "hitstop": 4,
+        "pushback": 35,
+        "knockback": 0,
+        "launch": 0,
+        "category": "MID",
+        "hitboxes": [],
+        "meterGainOnHit": 30,
+        "meterGainOnBlock": 15,
+        "meterCost": 0,
+        "chip": 0,
+        "knockdown": false,
+        "allowed": ["idle"],
+        "cancels": {},
+        "airOk": false,
+        "lowPose": false,
+        "animation": "punch"
+      }
+    }
+  }
+}

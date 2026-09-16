@@ -1,0 +1,29 @@
+{
+  "name": "aip-ultimate-fighter",
+  "private": true,
+  "version": "1.0.0",
+  "description": "AIP Ultimate Fighter — 2.5D kontorsfighting för Aros IT-Partner",
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "preflight": "node -v && pnpm -v && tsc -v",
+    "dev": "pnpm --parallel --filter @aipuf/server --filter @aipuf/web dev",
+    "dev:server": "pnpm --filter @aipuf/server dev",
+    "dev:web": "pnpm --filter @aipuf/web dev",
+    "build": "pnpm --filter @aipuf/contracts build && pnpm --filter @aipuf/content build && pnpm --filter @aipuf/sim build && pnpm --filter @aipuf/server build && pnpm --filter @aipuf/web build && pnpm --filter @aipuf/assets build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm --filter @aipuf/sim test && pnpm --filter @aipuf/content test && pnpm --filter @aipuf/contracts test && pnpm --filter @aipuf/server test",
+    "test:unit": "pnpm --filter @aipuf/sim test && pnpm --filter @aipuf/content test && pnpm --filter @aipuf/contracts test",
+    "test:integration": "pnpm --filter @aipuf/server test",
+    "test:e2e": "pnpm --filter @aipuf/e2e test",
+    "test:bots": "pnpm --filter @aipuf/sim bots",
+    "import-character": "pnpm --filter @aipuf/assets run import",
+    "start": "pnpm --filter @aipuf/server start",
+    "preview": "pnpm --filter @aipuf/web preview",
+    "docker:up": "docker compose -f deploy/docker-compose.yml up --build",
+    "docker:down": "docker compose -f deploy/docker-compose.yml down"
+  }
+}
