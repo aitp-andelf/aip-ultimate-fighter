@@ -405,7 +405,7 @@ export const App: React.FC = () => {
               netClientRef.current?.disconnect();
               setScreen("menu");
             }}
-            className="absolute top-4 right-4 z-20 rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-slate-800 transition"
+            className="absolute bottom-4 right-4 z-20 rounded-lg border border-slate-700/80 bg-slate-900/90 px-3.5 py-1.5 text-xs font-bold text-slate-300 hover:bg-slate-800 hover:text-white transition shadow-lg backdrop-blur"
           >
             Avsluta Match
           </button>

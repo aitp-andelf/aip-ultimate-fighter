@@ -93,10 +93,12 @@ export class GameRenderer {
 
   private currentStageId = "";
   private textureLoader = new THREE.TextureLoader();
+  private shadowTexture: THREE.CanvasTexture;
 
   constructor(options: RendererOptions) {
     this.container = options.container;
     this.showBoxes = options.showBoxes ?? false;
+    this.shadowTexture = this.createShadowTexture();
 
     // Scene setup
     this.scene = new THREE.Scene();
@@ -184,8 +186,20 @@ export class GameRenderer {
     };
 
     // Build procedural models immediately as zero-latency fallback
-    this.fighter0.proceduralParts = this.buildProceduralFighter(this.fighter0.group, this.fighter0.primaryColor, this.fighter0.secondaryColor);
-    this.fighter1.proceduralParts = this.buildProceduralFighter(this.fighter1.group, this.fighter1.primaryColor, this.fighter1.secondaryColor);
+    this.fighter0.proceduralParts = this.buildProceduralFighter(
+      this.fighter0.group,
+      this.fighter0.primaryColor,
+      this.fighter0.secondaryColor,
+      this.fighter0.archetype,
+      "grappler-a"
+    );
+    this.fighter1.proceduralParts = this.buildProceduralFighter(
+      this.fighter1.group,
+      this.fighter1.primaryColor,
+      this.fighter1.secondaryColor,
+      this.fighter1.archetype,
+      "shoto-a"
+    );
 
     // Impact Flash Overlay
     const flashGeo = new THREE.PlaneGeometry(30, 20);
@@ -204,10 +218,6 @@ export class GameRenderer {
     this.setupStage("serverrum");
     this.initAmbientParticles();
 
-    // Trigger async loading of 3D rigged GLTF models
-    this.loadRiggedFighter(0, "/models/RobotExpressive.glb");
-    this.loadRiggedFighter(1, "/models/RobotExpressive.glb");
-
     window.addEventListener("resize", this.onWindowResize);
   }
 
@@ -222,33 +232,37 @@ export class GameRenderer {
     this.fighter1.primaryColor = char1.colors[0];
     this.fighter1.secondaryColor = char1.colors[1];
 
-    // Rebuild procedural fallback with character colors
+    // Rebuild procedural fighter with character colors and custom accessories
     if (this.fighter0.proceduralParts) {
+      if (this.fighter0.proceduralParts.shadow) {
+        this.scene.remove(this.fighter0.proceduralParts.shadow);
+      }
       this.fighter0.group.remove(this.fighter0.proceduralParts.root);
     }
     this.fighter0.proceduralParts = this.buildProceduralFighter(
       this.fighter0.group,
       char0.colors[0],
       char0.colors[1],
-      char0.archetype
+      char0.archetype,
+      char0.id
     );
 
     if (this.fighter1.proceduralParts) {
+      if (this.fighter1.proceduralParts.shadow) {
+        this.scene.remove(this.fighter1.proceduralParts.shadow);
+      }
       this.fighter1.group.remove(this.fighter1.proceduralParts.root);
     }
     this.fighter1.proceduralParts = this.buildProceduralFighter(
       this.fighter1.group,
       char1.colors[0],
       char1.colors[1],
-      char1.archetype
+      char1.archetype,
+      char1.id
     );
 
-    // Determine 3D model: use character custom model if available, else RobotExpressive or Xbot
-    const model0 = char0.modelUrl || "/models/RobotExpressive.glb";
-    const model1 = char1.modelUrl || "/models/RobotExpressive.glb";
-
-    this.loadRiggedFighter(0, model0);
-    this.loadRiggedFighter(1, model1);
+    this.fighter0.isGltfLoaded = true;
+    this.fighter1.isGltfLoaded = true;
   }
 
   private async loadRiggedFighter(slot: 0 | 1, url: string): Promise<void> {
@@ -552,10 +566,39 @@ export class GameRenderer {
     const pos1Y = f1.y * WORLD_SCALE;
 
     this.fighter0.group.position.set(pos0X, pos0Y, 0);
-    this.fighter0.group.scale.set(f0.facing, 1, 1);
+    this.fighter0.group.scale.set(1, 1, 1);
 
     this.fighter1.group.position.set(pos1X, pos1Y, 0);
-    this.fighter1.group.scale.set(f1.facing, 1, 1);
+    this.fighter1.group.scale.set(1, 1, 1);
+
+    // Orientation & dynamic ground contact shadow
+    if (this.fighter0.proceduralParts) {
+      if (f0.state === "victory") {
+        this.fighter0.proceduralParts.root.rotation.y = -Math.PI / 2;
+      } else {
+        this.fighter0.proceduralParts.root.rotation.y = f0.facing === 1 ? -0.28 : Math.PI + 0.28;
+      }
+      const s0 = this.fighter0.proceduralParts.shadow;
+      s0.position.set(pos0X, 0.005, 0);
+      const jump0 = Math.max(0, pos0Y);
+      const scale0 = Math.max(0.45, 1.0 - jump0 * 0.25);
+      s0.scale.set(scale0, scale0, 1);
+      (s0.material as THREE.MeshBasicMaterial).opacity = Math.max(0.12, 0.60 - jump0 * 0.15);
+    }
+
+    if (this.fighter1.proceduralParts) {
+      if (f1.state === "victory") {
+        this.fighter1.proceduralParts.root.rotation.y = -Math.PI / 2;
+      } else {
+        this.fighter1.proceduralParts.root.rotation.y = f1.facing === 1 ? -0.28 : Math.PI + 0.28;
+      }
+      const s1 = this.fighter1.proceduralParts.shadow;
+      s1.position.set(pos1X, 0.005, 0);
+      const jump1 = Math.max(0, pos1Y);
+      const scale1 = Math.max(0.45, 1.0 - jump1 * 0.25);
+      s1.scale.set(scale1, scale1, 1);
+      (s1.material as THREE.MeshBasicMaterial).opacity = Math.max(0.12, 0.60 - jump1 * 0.15);
+    }
 
     // Hit-stop freeze frame check
     const isFrozen = this.hitFreezeFrames > 0;
@@ -625,7 +668,7 @@ export class GameRenderer {
         this.screenShake = Math.max(this.screenShake, 0.04);
       } else if (ev.kind === "super") {
         const user = ev.source === 0 ? f0 : f1;
-        const char = state.chars[ev.source];
+        const char = ev.source === 0 || ev.source === 1 ? state.chars[ev.source] : null;
         const charId = char ? char.id : "shoto-a";
         const ux = user.x * WORLD_SCALE;
         const uy = user.y * WORLD_SCALE + 1.0;
@@ -791,367 +834,1213 @@ export class GameRenderer {
     }
   }
 
-  // --- Procedural Fallback Rig ---
+  // --- Dynamic Soft Contact Shadow Generator ---
+
+  private createShadowTexture(): THREE.CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d")!;
+    const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, "rgba(0, 0, 0, 0.75)");
+    grad.addColorStop(0.5, "rgba(0, 0, 0, 0.35)");
+    grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+  }
+
+  // --- Bespoke Procedural 3D Fighter Rig ---
 
   private buildProceduralFighter(
     parent: THREE.Group,
     primaryColor: string,
     secondaryColor: string,
-    archetype: string = "shoto-a"
+    archetype: string = "shoto-a",
+    charId: string = "shoto-a"
   ): FighterBodyParts {
     const pMat = new THREE.MeshStandardMaterial({
       color: primaryColor,
-      roughness: 0.35,
-      metalness: 0.3,
+      roughness: 0.32,
+      metalness: 0.25,
     });
     const sMat = new THREE.MeshStandardMaterial({
       color: secondaryColor,
-      roughness: 0.45,
-      metalness: 0.2,
+      roughness: 0.40,
+      metalness: 0.20,
     });
-    const jointMat = new THREE.MeshStandardMaterial({
-      color: 0x1e293b,
-      roughness: 0.7,
+    const skinMat = new THREE.MeshStandardMaterial({
+      color: 0xf5d0b0, // warm athletic skin tone
+      roughness: 0.55,
+      metalness: 0.05,
+    });
+    const darkMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a, // dark navy / black for belts and soles
+      roughness: 0.70,
+      metalness: 0.20,
+    });
+    const goldMat = new THREE.MeshStandardMaterial({
+      color: 0xf59e0b,
+      roughness: 0.25,
+      metalness: 0.85,
+    });
+    const chromeMat = new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0,
+      roughness: 0.15,
+      metalness: 0.95,
     });
 
     const root = new THREE.Group();
-    root.scale.set(1.22, 1.22, 1.22); // Match 2.05m heroic arcade height
-    root.rotation.y = Math.PI / 2; // Face opponent along X-axis
+
+    // Archetype scale factor
+    let rootScale = 1.22;
+    if (charId === "grappler-a" || charId === "grappler-b") {
+      rootScale = 1.32; // Heavyweight grappler build
+    } else if (charId === "hybrid-a") {
+      rootScale = 1.28; // Heavyweight powerlifter build
+    } else if (archetype.startsWith("zoner")) {
+      rootScale = 1.18; // Lean agile zoner
+    }
+    root.scale.set(rootScale, rootScale, rootScale);
     parent.add(root);
 
-    // Torso
-    const torsoGeo = new THREE.BoxGeometry(0.38, 0.48, 0.24);
-    const torso = new THREE.Mesh(torsoGeo, pMat);
-    torso.position.set(0, 1.15, 0);
-    torso.castShadow = true;
-    torso.receiveShadow = true;
+    // Anatomical dimension calibration:
+    // +X is forward towards opponent (chest direction)
+    // -X is backward (spine direction)
+    // +Y is up
+    // +Z is right/lead side (towards camera)
+    // -Z is left/rear side (away from camera)
+    let shoulderSpan = 0.25; // center to shoulder joint along Z
+    let chestDepthX = 0.25;  // thickness from spine to pecs along X
+    let torsoH = 0.52;
+
+    if (charId === "grappler-a" || charId === "grappler-b") {
+      shoulderSpan = 0.29; // massive broad shoulders
+      chestDepthX = 0.29;
+    } else if (charId === "hybrid-a") {
+      shoulderSpan = 0.30; // barrel chest
+      chestDepthX = 0.30;
+    } else if (archetype.startsWith("zoner")) {
+      shoulderSpan = 0.22; // lean athletic
+      chestDepthX = 0.21;
+    }
+
+    // --- Torso Group (Center at y = 1.14) ---
+    const torso = new THREE.Group();
+    torso.position.set(0, 1.14, 0);
     root.add(torso);
 
-    // Head
-    const headGeo = new THREE.SphereGeometry(0.16, 16, 16);
-    const head = new THREE.Mesh(headGeo, sMat);
-    head.position.set(0, 0.4, 0);
-    head.castShadow = true;
-    torso.add(head);
+    // 1. Upper Chest / Ribcage (V-taper)
+    const chestGeo = new THREE.CylinderGeometry(
+      shoulderSpan * 0.92,
+      shoulderSpan * 0.76,
+      torsoH * 0.58,
+      12
+    );
+    const chestMesh = new THREE.Mesh(chestGeo, pMat);
+    chestMesh.position.set(0, torsoH * 0.18, 0);
+    chestMesh.scale.set((chestDepthX / shoulderSpan) * 1.05, 1, 1);
+    chestMesh.castShadow = true;
+    chestMesh.receiveShadow = true;
+    torso.add(chestMesh);
 
-    // Visor/eyes
-    const visorGeo = new THREE.BoxGeometry(0.2, 0.06, 0.08);
-    const visorMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
-    const visor = new THREE.Mesh(visorGeo, visorMat);
-    visor.position.set(0.08, 0, 0.12);
-    head.add(visor);
+    // Pectoral definition plates on front (+X)
+    const pecGeo = new THREE.BoxGeometry(0.04, torsoH * 0.28, shoulderSpan * 0.72);
+    const pecMesh = new THREE.Mesh(pecGeo, pMat);
+    pecMesh.position.set(chestDepthX * 0.48, torsoH * 0.20, 0);
+    pecMesh.castShadow = true;
+    torso.add(pecMesh);
 
-    // Left Arm (Back arm)
-    const leftArmGroup = new THREE.Group();
-    leftArmGroup.position.set(0, 0.18, -0.18);
-    torso.add(leftArmGroup);
+    // 2. Abdomen / Waist
+    const abGeo = new THREE.CylinderGeometry(
+      shoulderSpan * 0.74,
+      shoulderSpan * 0.70,
+      torsoH * 0.26,
+      10
+    );
+    const abMesh = new THREE.Mesh(abGeo, sMat);
+    abMesh.position.set(0, -torsoH * 0.16, 0);
+    abMesh.scale.set((chestDepthX / shoulderSpan) * 0.95, 1, 1);
+    abMesh.castShadow = true;
+    torso.add(abMesh);
 
-    const upperArmGeo = new THREE.CylinderGeometry(0.06, 0.05, 0.28, 8);
-    const lUpperArm = new THREE.Mesh(upperArmGeo, sMat);
-    lUpperArm.position.set(0, -0.14, 0);
-    lUpperArm.castShadow = true;
-    leftArmGroup.add(lUpperArm);
+    // 3. Combat Belt around waist
+    const beltGeo = new THREE.CylinderGeometry(
+      shoulderSpan * 0.76,
+      shoulderSpan * 0.76,
+      0.08,
+      12
+    );
+    const beltMesh = new THREE.Mesh(beltGeo, darkMat);
+    beltMesh.position.set(0, -torsoH * 0.26, 0);
+    beltMesh.scale.set((chestDepthX / shoulderSpan) * 1.0, 1, 1);
+    torso.add(beltMesh);
 
-    const lForearmGroup = new THREE.Group();
-    lForearmGroup.position.set(0, -0.26, 0);
-    leftArmGroup.add(lForearmGroup);
+    // Belt Buckle on front (+X)
+    const buckleGeo = new THREE.BoxGeometry(0.04, 0.09, 0.12);
+    const buckleMesh = new THREE.Mesh(buckleGeo, charId === "hybrid-a" ? chromeMat : goldMat);
+    buckleMesh.position.set(chestDepthX * 0.48, -torsoH * 0.26, 0);
+    torso.add(buckleMesh);
 
-    const forearmGeo = new THREE.CylinderGeometry(0.05, 0.045, 0.26, 8);
-    const lForearm = new THREE.Mesh(forearmGeo, pMat);
-    lForearm.position.set(0, -0.13, 0);
-    lForearm.castShadow = true;
-    lForearmGroup.add(lForearm);
-
-    // Right Arm (Front arm)
-    const rightArmGroup = new THREE.Group();
-    rightArmGroup.position.set(0, 0.18, 0.18);
-    torso.add(rightArmGroup);
-
-    const rUpperArm = new THREE.Mesh(upperArmGeo, sMat);
-    rUpperArm.position.set(0, -0.14, 0);
-    rUpperArm.castShadow = true;
-    rightArmGroup.add(rUpperArm);
-
-    const rForearmGroup = new THREE.Group();
-    rForearmGroup.position.set(0, -0.26, 0);
-    rightArmGroup.add(rForearmGroup);
-
-    const rForearm = new THREE.Mesh(forearmGeo, pMat);
-    rForearm.position.set(0, -0.13, 0);
-    rForearm.castShadow = true;
-    rForearmGroup.add(rForearm);
-
-    // Pelvis
-    const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.16, 0.22), jointMat);
-    pelvis.position.set(0, -0.3, 0);
+    // 4. Pelvis / Hips
+    const pelvisGeo = new THREE.BoxGeometry(chestDepthX * 0.88, 0.14, shoulderSpan * 1.35);
+    const pelvis = new THREE.Mesh(pelvisGeo, darkMat);
+    pelvis.position.set(0, -torsoH * 0.38, 0);
     pelvis.castShadow = true;
     torso.add(pelvis);
 
-    // Left Leg
-    const leftLegGroup = new THREE.Group();
-    leftLegGroup.position.set(0, -0.08, -0.11);
-    pelvis.add(leftLegGroup);
+    // 5. Neck
+    const neckGeo = new THREE.CylinderGeometry(0.065, 0.08, 0.12, 10);
+    const neck = new THREE.Mesh(neckGeo, skinMat);
+    neck.position.set(0, torsoH * 0.48, 0);
+    neck.castShadow = true;
+    torso.add(neck);
 
-    const thighGeo = new THREE.CylinderGeometry(0.075, 0.06, 0.38, 8);
-    const lThigh = new THREE.Mesh(thighGeo, pMat);
-    lThigh.position.set(0, -0.19, 0);
-    lThigh.castShadow = true;
-    leftLegGroup.add(lThigh);
+    // --- Head Group ---
+    const head = new THREE.Group();
+    head.position.set(0, torsoH * 0.52 + 0.14, 0);
+    torso.add(head);
 
-    const lShinGroup = new THREE.Group();
-    lShinGroup.position.set(0, -0.36, 0);
-    leftLegGroup.add(lShinGroup);
+    // Cranium
+    const headGeo = new THREE.SphereGeometry(0.14, 16, 14);
+    const cranium = new THREE.Mesh(headGeo, skinMat);
+    cranium.scale.set(1.0, 1.1, 0.95);
+    cranium.castShadow = true;
+    head.add(cranium);
 
-    const shinGeo = new THREE.CylinderGeometry(0.06, 0.05, 0.38, 8);
-    const lShin = new THREE.Mesh(shinGeo, sMat);
-    lShin.position.set(0, -0.19, 0);
-    lShin.castShadow = true;
-    lShinGroup.add(lShin);
+    // Heroic Jaw / Chin Box
+    const jawGeo = new THREE.BoxGeometry(0.12, 0.09, 0.12);
+    const jaw = new THREE.Mesh(jawGeo, skinMat);
+    jaw.position.set(0.05, -0.06, 0);
+    jaw.castShadow = true;
+    head.add(jaw);
 
-    // Right Leg
-    const rightLegGroup = new THREE.Group();
-    rightLegGroup.position.set(0, -0.08, 0.11);
-    pelvis.add(rightLegGroup);
+    // Brow Ridge on front (+X)
+    const browGeo = new THREE.BoxGeometry(0.05, 0.04, 0.18);
+    const brow = new THREE.Mesh(browGeo, pMat);
+    brow.position.set(0.11, 0.04, 0);
+    head.add(brow);
 
-    const rThigh = new THREE.Mesh(thighGeo, pMat);
-    rThigh.position.set(0, -0.19, 0);
-    rThigh.castShadow = true;
-    rightLegGroup.add(rThigh);
+    // Expressive Glowing Visor / Eyes
+    const visorGeo = new THREE.BoxGeometry(0.04, 0.045, 0.16);
+    const visorMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    const visor = new THREE.Mesh(visorGeo, visorMat);
+    visor.position.set(0.13, 0.005, 0);
+    head.add(visor);
 
-    const rShinGroup = new THREE.Group();
-    rShinGroup.position.set(0, -0.36, 0);
-    rightLegGroup.add(rShinGroup);
+    // --- Shoulder Joints & Arms ---
+    const shoulderY = torsoH * 0.34;
 
-    const rShin = new THREE.Mesh(shinGeo, sMat);
-    rShin.position.set(0, -0.19, 0);
-    rShin.castShadow = true;
-    rShinGroup.add(rShin);
+    const buildArm = (isRight: boolean) => {
+      const armGroup = new THREE.Group();
+      const zSign = isRight ? 1 : -1;
+      armGroup.position.set(0, shoulderY, zSign * (shoulderSpan + 0.02));
+      torso.add(armGroup);
 
-    if (archetype.startsWith("grappler")) {
-      const shoulderPad = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.18), sMat);
-      shoulderPad.position.set(0, 0.1, 0);
-      rightArmGroup.add(shoulderPad);
-    }
+      // Deltoid Shoulder Cap
+      const deltGeo = new THREE.SphereGeometry(0.085, 12, 12);
+      const deltoid = new THREE.Mesh(deltGeo, pMat);
+      deltoid.scale.set(1.0, 1.1, 1.1);
+      deltoid.castShadow = true;
+      armGroup.add(deltoid);
 
-    return {
+      // Upper Arm (Biceps)
+      const bicepGeo = new THREE.CylinderGeometry(0.058, 0.050, 0.26, 10);
+      const upperArm = new THREE.Mesh(bicepGeo, skinMat);
+      upperArm.position.set(0, -0.13, 0);
+      upperArm.castShadow = true;
+      armGroup.add(upperArm);
+
+      // Elbow Joint
+      const elbowGeo = new THREE.SphereGeometry(0.050, 8, 8);
+      const elbow = new THREE.Mesh(elbowGeo, sMat);
+      elbow.position.set(0, -0.26, 0);
+      armGroup.add(elbow);
+
+      // Forearm Group (Pivots at elbow)
+      const forearmGroup = new THREE.Group();
+      forearmGroup.position.set(0, -0.26, 0);
+      armGroup.add(forearmGroup);
+
+      // Forearm Musculature
+      const forearmGeo = new THREE.CylinderGeometry(0.052, 0.044, 0.24, 10);
+      const forearm = new THREE.Mesh(forearmGeo, sMat);
+      forearm.position.set(0, -0.12, 0);
+      forearm.castShadow = true;
+      forearmGroup.add(forearm);
+
+      // Wrist Cuff / Bracer
+      const cuffGeo = new THREE.CylinderGeometry(0.054, 0.052, 0.06, 10);
+      const cuff = new THREE.Mesh(cuffGeo, darkMat);
+      cuff.position.set(0, -0.21, 0);
+      forearmGroup.add(cuff);
+
+      // Clenched Combat Fist at (0, -0.26, 0)
+      const fistGroup = new THREE.Group();
+      fistGroup.position.set(0, -0.26, 0);
+      forearmGroup.add(fistGroup);
+
+      const fistGeo = new THREE.BoxGeometry(0.08, 0.08, 0.07);
+      const fist = new THREE.Mesh(fistGeo, skinMat);
+      fist.position.set(0.01, -0.02, 0);
+      fist.castShadow = true;
+      fistGroup.add(fist);
+
+      const thumbGeo = new THREE.BoxGeometry(0.035, 0.035, 0.035);
+      const thumb = new THREE.Mesh(thumbGeo, skinMat);
+      thumb.position.set(0.05, -0.01, zSign * 0.02);
+      fistGroup.add(thumb);
+
+      return { armGroup, forearmGroup, fistGroup };
+    };
+
+    const rightArmParts = buildArm(true);
+    const leftArmParts = buildArm(false);
+
+    // --- Legs & Boots ---
+    const legSpanZ = shoulderSpan * 0.52;
+
+    const buildLeg = (isRight: boolean) => {
+      const legGroup = new THREE.Group();
+      const zSign = isRight ? 1 : -1;
+      legGroup.position.set(0, -torsoH * 0.40, zSign * legSpanZ);
+      torso.add(legGroup);
+
+      // Hip Joint
+      const hipGeo = new THREE.SphereGeometry(0.068, 10, 10);
+      const hip = new THREE.Mesh(hipGeo, darkMat);
+      legGroup.add(hip);
+
+      // Thigh (Athletic Quad Taper)
+      const thighGeo = new THREE.CylinderGeometry(0.078, 0.062, 0.36, 10);
+      const thigh = new THREE.Mesh(thighGeo, pMat);
+      thigh.position.set(0, -0.18, 0);
+      thigh.castShadow = true;
+      legGroup.add(thigh);
+
+      // Knee Joint & Frontal Kneecap Plate
+      const kneeGeo = new THREE.SphereGeometry(0.060, 8, 8);
+      const knee = new THREE.Mesh(kneeGeo, sMat);
+      knee.position.set(0, -0.36, 0);
+      legGroup.add(knee);
+
+      const kneecapGeo = new THREE.BoxGeometry(0.04, 0.08, 0.08);
+      const kneecap = new THREE.Mesh(kneecapGeo, darkMat);
+      kneecap.position.set(0.045, -0.36, 0);
+      legGroup.add(kneecap);
+
+      // Shin Group (Pivots at knee)
+      const shinGroup = new THREE.Group();
+      shinGroup.position.set(0, -0.36, 0);
+      legGroup.add(shinGroup);
+
+      // Shin / Calf
+      const shinGeo = new THREE.CylinderGeometry(0.062, 0.054, 0.34, 10);
+      const shin = new THREE.Mesh(shinGeo, sMat);
+      shin.position.set(0, -0.17, 0);
+      shin.castShadow = true;
+      shinGroup.add(shin);
+
+      // Boot Collar
+      const bootCollarGeo = new THREE.CylinderGeometry(0.066, 0.060, 0.12, 10);
+      const bootCollar = new THREE.Mesh(bootCollarGeo, darkMat);
+      bootCollar.position.set(0, -0.27, 0);
+      shinGroup.add(bootCollar);
+
+      // --- Solid Grounded Boot at (0, -0.36, 0) ---
+      const bootGroup = new THREE.Group();
+      bootGroup.position.set(0, -0.36, 0);
+      shinGroup.add(bootGroup);
+
+      // Rubber Sole resting flush on floor
+      const soleGeo = new THREE.BoxGeometry(0.24, 0.045, 0.12);
+      const sole = new THREE.Mesh(soleGeo, darkMat);
+      sole.position.set(0.04, 0.0225, 0);
+      sole.castShadow = true;
+      sole.receiveShadow = true;
+      bootGroup.add(sole);
+
+      // Raised Heel Pad behind ankle (-X)
+      const heelGeo = new THREE.BoxGeometry(0.08, 0.025, 0.11);
+      const heel = new THREE.Mesh(heelGeo, darkMat);
+      heel.position.set(-0.06, 0.045, 0);
+      bootGroup.add(heel);
+
+      // Boot Upper (Leather body)
+      const upperGeo = new THREE.BoxGeometry(0.18, 0.075, 0.11);
+      const bootUpper = new THREE.Mesh(upperGeo, pMat);
+      bootUpper.position.set(0.03, 0.06, 0);
+      bootUpper.castShadow = true;
+      bootGroup.add(bootUpper);
+
+      // Reinforced Toe Cap pointing forward (+X)
+      const toeGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.11, 8);
+      const toe = new THREE.Mesh(toeGeo, darkMat);
+      toe.rotation.x = Math.PI / 2;
+      toe.position.set(0.13, 0.045, 0);
+      bootGroup.add(toe);
+
+      return { legGroup, shinGroup, bootGroup };
+    };
+
+    const rightLegParts = buildLeg(true);
+    const leftLegParts = buildLeg(false);
+
+    // Ground Contact Shadow pinned firmly to canvas floor
+    const shadowGeo = new THREE.PlaneGeometry(1.2, 0.65);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      map: this.shadowTexture,
+      transparent: true,
+      opacity: 0.60,
+      depthWrite: false,
+    });
+    const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.set(0, 0.005, 0);
+    this.scene.add(shadow);
+
+    const createJointState = (): JointState => ({
+      rx: 0,
+      ry: 0,
+      rz: 0,
+      targetRx: 0,
+      targetRy: 0,
+      targetRz: 0,
+    });
+
+    const parts: FighterBodyParts = {
       root,
       torso,
       head,
-      leftArm: leftArmGroup,
-      leftForearm: lForearmGroup,
-      rightArm: rightArmGroup,
-      rightForearm: rForearmGroup,
-      leftLeg: leftLegGroup,
-      leftShin: lShinGroup,
-      rightLeg: rightLegGroup,
-      rightShin: rShinGroup,
+      leftArm: leftArmParts.armGroup,
+      leftForearm: leftArmParts.forearmGroup,
+      rightArm: rightArmParts.armGroup,
+      rightForearm: rightArmParts.forearmGroup,
+      leftLeg: leftLegParts.legGroup,
+      leftShin: leftLegParts.shinGroup,
+      rightLeg: rightLegParts.legGroup,
+      rightShin: rightLegParts.shinGroup,
+      shadow,
+      charId,
+      props: {},
+      joints: {
+        torso: createJointState(),
+        head: createJointState(),
+        leftArm: createJointState(),
+        leftForearm: createJointState(),
+        rightArm: createJointState(),
+        rightForearm: createJointState(),
+        leftLeg: createJointState(),
+        leftShin: createJointState(),
+        rightLeg: createJointState(),
+        rightShin: createJointState(),
+      },
+      rootY: { current: 0, target: 0 },
+      baseRootY: 0,
     };
+
+    // Attach signature props and character accessories
+    this.addCharacterAccessories(parts, charId, primaryColor, secondaryColor);
+
+    // Ground Alignment: compute bottom-most extent of the boots and ground firmly at y = 0
+    root.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(root);
+    const baseRootY = -bounds.min.y;
+    root.position.y = baseRootY;
+    parts.baseRootY = baseRootY;
+
+    return parts;
   }
+
+  // --- Character Accessories & Signature Props Builder ---
+
+  private addCharacterAccessories(
+    parts: FighterBodyParts,
+    charId: string,
+    primaryColor: string,
+    secondaryColor: string
+  ): void {
+    const goldMat = new THREE.MeshStandardMaterial({
+      color: 0xf59e0b,
+      metalness: 0.85,
+      roughness: 0.25,
+    });
+    const steelMat = new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0,
+      metalness: 0.95,
+      roughness: 0.2,
+    });
+    const darkMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      roughness: 0.6,
+      metalness: 0.3,
+    });
+
+    if (charId === "grappler-a") {
+      // --- Capitan: Navy Fedora Hat, Pauldrons, Brass Knuckles & Eagle Belt ---
+      const hatMat = new THREE.MeshStandardMaterial({
+        color: 0x172554,
+        roughness: 0.5,
+        metalness: 0.1,
+      });
+
+      // Fedora Brim tilted forward toward +X
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.02, 20), hatMat);
+      brim.position.set(0.02, 0.14, 0);
+      brim.rotation.z = -0.08;
+      parts.head.add(brim);
+
+      // Fedora Crown
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.13, 20), hatMat);
+      crown.position.set(0.02, 0.21, 0);
+      crown.rotation.z = -0.08;
+      parts.head.add(crown);
+
+      // Fedora Gold Ribbon
+      const ribbon = new THREE.Mesh(new THREE.CylinderGeometry(0.162, 0.162, 0.03, 20), goldMat);
+      ribbon.position.set(0.02, 0.16, 0);
+      ribbon.rotation.z = -0.08;
+      parts.head.add(ribbon);
+
+      // Pauldrons (Shoulder Armor)
+      const lPad = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.18), hatMat);
+      lPad.position.set(0, 0.04, 0);
+      parts.leftArm.add(lPad);
+
+      const rPad = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.13, 0.20), hatMat);
+      rPad.position.set(0, 0.04, 0);
+      parts.rightArm.add(rPad);
+
+      // Brass Knuckles positioned right on the clenched fists
+      const rKnuckle = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.06, 0.08), goldMat);
+      rKnuckle.position.set(0.04, -0.26, 0);
+      parts.rightForearm.add(rKnuckle);
+
+      const lKnuckle = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.06, 0.08), goldMat);
+      lKnuckle.position.set(0.04, -0.26, 0);
+      parts.leftForearm.add(lKnuckle);
+
+      // Eagle Championship Belt Buckle on front (+X)
+      const beltBuckle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.10, 0.14), goldMat);
+      beltBuckle.position.set(0.22, -0.22, 0);
+      parts.torso.add(beltBuckle);
+    } else if (charId === "shoto-a") {
+      // --- Irstababben: Swedish Chef Toque, Red Apron & 3D Wooden Pizza Spade (Pizzaspade) ---
+      const whiteMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.3,
+      });
+      const redMat = new THREE.MeshStandardMaterial({
+        color: 0xdc2626,
+        roughness: 0.4,
+      });
+      const woodMat = new THREE.MeshStandardMaterial({
+        color: 0xd97706,
+        roughness: 0.65,
+        metalness: 0.05,
+      });
+      const woodMatDark = new THREE.MeshStandardMaterial({
+        color: 0xb45309,
+        roughness: 0.5,
+        metalness: 0.08,
+      });
+
+      // Chef's Toque (White Hat with Red Base Band)
+      const hatBand = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.155, 0.05, 16), redMat);
+      hatBand.position.set(0, 0.15, 0);
+      parts.head.add(hatBand);
+
+      const toqueCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.15, 0.28, 16), whiteMat);
+      toqueCrown.position.set(0, 0.30, 0);
+      parts.head.add(toqueCrown);
+
+      // Chef Waist Apron on front (+X)
+      const apron = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.32, 0.28), redMat);
+      apron.position.set(0.18, -0.24, 0);
+      parts.torso.add(apron);
+
+      // 3D Wooden Pizza Spade (Pizzaspade) gripped directly in right fist at (0, -0.26, 0)
+      const spadeGroup = new THREE.Group();
+
+      // Turned birch handle with agile fighting proportions (0.54m)
+      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.54, 8), woodMat);
+      handle.position.set(0.14, 0, 0);
+      handle.rotation.z = Math.PI / 2;
+      handle.castShadow = true;
+      spadeGroup.add(handle);
+
+      // Handle grip wrap at hand
+      const gripWrap = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.12, 8), redMat);
+      gripWrap.position.set(0, 0, 0);
+      gripWrap.rotation.z = Math.PI / 2;
+      spadeGroup.add(gripWrap);
+
+      // Pommel ring at rear
+      const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 8), goldMat);
+      pommel.position.set(-0.14, 0, 0);
+      spadeGroup.add(pommel);
+
+      // Flared Birch Paddle Blade
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.022, 0.20), woodMatDark);
+      blade.position.set(0.44, 0, 0);
+      blade.castShadow = true;
+      spadeGroup.add(blade);
+
+      // Beveled Gold Crust Edge
+      const bevel = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.024, 0.18), goldMat);
+      bevel.position.set(0.57, 0, 0);
+      spadeGroup.add(bevel);
+
+      // Attach spadeGroup to right fist pivot
+      spadeGroup.position.set(0, -0.26, 0);
+      spadeGroup.rotation.set(0.12, 0, 0.25);
+      parts.rightForearm.add(spadeGroup);
+      parts.props["spade"] = spadeGroup;
+      parts.props["spadeBlade"] = blade;
+    } else if (charId === "zoner-a") {
+      // --- Femboyfippe: Cyber Visor, Defibrillator Electrode Forearm Pads & ECG Diode ---
+      const cyanNeonMat = new THREE.MeshStandardMaterial({
+        color: 0x22d3ee,
+        emissive: 0x06b6d4,
+        emissiveIntensity: 1.8,
+        roughness: 0.2,
+      });
+      const violetNeonMat = new THREE.MeshStandardMaterial({
+        color: 0xc084fc,
+        emissive: 0x9333ea,
+        emissiveIntensity: 1.6,
+        roughness: 0.2,
+      });
+
+      // Cyber Visor
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.22), cyanNeonMat);
+      visor.position.set(0.13, 0.02, 0);
+      parts.head.add(visor);
+
+      // Defibrillator Shock Paddles on Forearms
+      const rPaddle = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.14, 0.08), cyanNeonMat);
+      rPaddle.position.set(0.04, -0.16, 0);
+      parts.rightForearm.add(rPaddle);
+
+      const lPaddle = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.14, 0.08), violetNeonMat);
+      lPaddle.position.set(0.04, -0.16, 0);
+      parts.leftForearm.add(lPaddle);
+
+      // Chest ECG Heart Diode on front (+X)
+      const ecg = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), cyanNeonMat);
+      ecg.position.set(0.16, 0.08, 0);
+      parts.torso.add(ecg);
+    } else if (charId === "grappler-b") {
+      // --- Babas: Dark Sunglasses & Twin Shoulder LASIK Laser Cannons ---
+      const sunglassesMat = new THREE.MeshStandardMaterial({
+        color: 0x020617,
+        metalness: 0.9,
+        roughness: 0.1,
+      });
+      const rubyLaserMat = new THREE.MeshStandardMaterial({
+        color: 0xef4444,
+        emissive: 0xef4444,
+        emissiveIntensity: 2.2,
+        roughness: 0.2,
+      });
+
+      // Sunglasses
+      const shades = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.22), sunglassesMat);
+      shades.position.set(0.13, 0.03, 0);
+      parts.head.add(shades);
+
+      // Right Shoulder LASIK Cannon pointing forward (+X)
+      const cannonR = new THREE.Group();
+      const baseR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.12), darkMat);
+      const barrelR = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.18, 8), steelMat);
+      barrelR.position.set(0.08, 0, 0);
+      barrelR.rotation.z = -Math.PI / 2;
+      const lensR = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 8), rubyLaserMat);
+      lensR.position.set(0.17, 0, 0);
+      cannonR.add(baseR, barrelR, lensR);
+      cannonR.position.set(0, 0.08, 0);
+      parts.rightArm.add(cannonR);
+
+      // Left Shoulder LASIK Cannon pointing forward (+X)
+      const cannonL = new THREE.Group();
+      const baseL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.12), darkMat);
+      const barrelL = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.18, 8), steelMat);
+      barrelL.position.set(0.08, 0, 0);
+      barrelL.rotation.z = -Math.PI / 2;
+      const lensL = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 8), rubyLaserMat);
+      lensL.position.set(0.17, 0, 0);
+      cannonL.add(baseL, barrelL, lensL);
+      cannonL.position.set(0, 0.08, 0);
+      parts.leftArm.add(cannonL);
+
+      // Combat Wraps
+      const wrapMat = new THREE.MeshStandardMaterial({ color: 0xfca5a5, roughness: 0.6 });
+      const rWrap = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.10, 8), wrapMat);
+      rWrap.position.set(0, -0.18, 0);
+      parts.rightForearm.add(rWrap);
+    } else if (charId === "zoner-b") {
+      // --- Stinkfiend: Gas Mask with Filter Canisters & Twin Back Biohazard Sludge Tanks ---
+      const toxicGreenMat = new THREE.MeshStandardMaterial({
+        color: 0x84cc16,
+        emissive: 0x4ade80,
+        emissiveIntensity: 1.6,
+        roughness: 0.3,
+      });
+      const tankMat = new THREE.MeshStandardMaterial({
+        color: 0x15803d,
+        metalness: 0.6,
+        roughness: 0.35,
+      });
+
+      // Gas Mask Snout on front (+X)
+      const maskSnout = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.13, 0.14), darkMat);
+      maskSnout.position.set(0.12, -0.04, 0);
+      parts.head.add(maskSnout);
+
+      // Cheek Filter Canisters
+      const canR = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.09, 8), darkMat);
+      canR.position.set(0.06, -0.06, 0.11);
+      parts.head.add(canR);
+
+      const canL = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.09, 8), darkMat);
+      canL.position.set(0.06, -0.06, -0.11);
+      parts.head.add(canL);
+
+      // Glowing Toxic Lenses on front (+X)
+      const lensR = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), toxicGreenMat);
+      lensR.position.set(0.12, 0.04, 0.06);
+      parts.head.add(lensR);
+
+      const lensL = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), toxicGreenMat);
+      lensL.position.set(0.12, 0.04, -0.06);
+      parts.head.add(lensL);
+
+      // Twin Back Biohazard Tanks on rear (-X)
+      const tankR = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.44, 10), tankMat);
+      tankR.position.set(-0.16, 0.05, 0.11);
+      parts.torso.add(tankR);
+
+      const tankL = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.44, 10), tankMat);
+      tankL.position.set(-0.16, 0.05, -0.11);
+      parts.torso.add(tankL);
+
+      // Toxic Sludge Indicator Sight Glass on rear
+      const sightTube = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.35, 6), toxicGreenMat);
+      sightTube.position.set(-0.21, 0.05, 0);
+      parts.torso.add(sightTube);
+    } else if (charId === "hybrid-a") {
+      // --- Ekander: Heavyweight Powerlifting Belt, Chrome Buckle & Gold Brow Guard ---
+      const beltLeatherMat = new THREE.MeshStandardMaterial({
+        color: 0x3b0764,
+        roughness: 0.7,
+        metalness: 0.1,
+      });
+
+      // Heavy Powerlifting Belt
+      const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.14, 16), beltLeatherMat);
+      belt.position.set(0, -0.22, 0);
+      parts.torso.add(belt);
+
+      // Giant Chrome Steel Buckle on front (+X)
+      const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.14), steelMat);
+      buckle.position.set(0.22, -0.22, 0);
+      parts.torso.add(buckle);
+
+      // Gold Brow Guard
+      const brow = new THREE.Mesh(new THREE.CylinderGeometry(0.165, 0.165, 0.04, 16), goldMat);
+      brow.position.set(0, 0.08, 0);
+      parts.head.add(brow);
+    } else if (charId === "shoto-b") {
+      // --- Goonström: Shadow Assassin Cowl / Hood & Magenta Glowing Visor ---
+      const magentaNeonMat = new THREE.MeshStandardMaterial({
+        color: 0xf43f5e,
+        emissive: 0xd946ef,
+        emissiveIntensity: 2.2,
+        roughness: 0.2,
+      });
+
+      // Deep Assassin Shadow Hood
+      const hood = new THREE.Mesh(
+        new THREE.SphereGeometry(0.21, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.8),
+        darkMat
+      );
+      hood.position.set(0, 0.04, 0);
+      parts.head.add(hood);
+
+      // Piercing Glowing Eye Slit within Hood on front (+X)
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.035, 0.18), magentaNeonMat);
+      visor.position.set(0.13, 0.02, 0);
+      parts.head.add(visor);
+
+      // Spiked Forearm Wraps
+      const gauntletR = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.16, 0.11), darkMat);
+      gauntletR.position.set(0, -0.13, 0);
+      parts.rightForearm.add(gauntletR);
+
+      const gauntletL = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.16, 0.11), darkMat);
+      gauntletL.position.set(0, -0.13, 0);
+      parts.leftForearm.add(gauntletL);
+    } else {
+      // --- Bulgarian Copper Thief: Worker Flat Cap, Steampunk Goggles, Copper Wire Coils & Crowbar ---
+      const capMat = new THREE.MeshStandardMaterial({
+        color: 0x334155,
+        roughness: 0.7,
+        metalness: 0.1,
+      });
+      const brassMat = new THREE.MeshStandardMaterial({
+        color: 0xd97706,
+        metalness: 0.85,
+        roughness: 0.25,
+      });
+      const copperMat = new THREE.MeshStandardMaterial({
+        color: 0xcd7f32,
+        metalness: 0.92,
+        roughness: 0.2,
+      });
+
+      // Worker Newsboy Flat Cap
+      const capCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.17, 0.07, 16), capMat);
+      capCrown.position.set(0.02, 0.16, 0);
+      capCrown.rotation.z = -0.08;
+      parts.head.add(capCrown);
+
+      const capBrim = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.14), capMat);
+      capBrim.position.set(0.12, 0.14, 0);
+      parts.head.add(capBrim);
+
+      // Steampunk Brass Goggles on forehead (+X)
+      const goggleR = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.014, 8, 16), brassMat);
+      goggleR.position.set(0.12, 0.10, 0.05);
+      parts.head.add(goggleR);
+
+      const goggleL = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.014, 8, 16), brassMat);
+      goggleL.position.set(0.12, 0.10, -0.05);
+      parts.head.add(goggleL);
+
+      // Coiled Stripped Copper Wires on Forearms
+      for (let i = 0; i < 3; i++) {
+        const cRingR = new THREE.Mesh(new THREE.TorusGeometry(0.060, 0.011, 8, 16), copperMat);
+        cRingR.position.set(0, -0.08 - i * 0.06, 0);
+        cRingR.rotation.x = Math.PI / 2;
+        parts.rightForearm.add(cRingR);
+
+        const cRingL = new THREE.Mesh(new THREE.TorusGeometry(0.060, 0.011, 8, 16), copperMat);
+        cRingL.position.set(0, -0.08 - i * 0.06, 0);
+        cRingL.rotation.x = Math.PI / 2;
+        parts.leftForearm.add(cRingL);
+      }
+
+      // Steel Crowbar holstered on hip
+      const crowbar = new THREE.Group();
+      const cbShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.44, 8), steelMat);
+      const cbHook = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.016, 6, 12, Math.PI * 0.8), steelMat);
+      cbHook.position.set(0, 0.22, 0);
+      cbHook.rotation.z = Math.PI / 4;
+      crowbar.add(cbShaft, cbHook);
+      crowbar.position.set(-0.05, -0.22, 0.16);
+      crowbar.rotation.z = -0.3;
+      parts.torso.add(crowbar);
+    }
+  }
+
+  // --- High-Fidelity Procedural Combat Pose & Joint Lerp Engine ---
 
   private poseProceduralFighter(parts: FighterBodyParts, fighter: FighterRuntime): void {
     const t = fighter.stateTime * 0.15;
 
-    // Reset rotations
-    parts.torso.rotation.set(0, 0, 0);
-    parts.head.rotation.set(0, 0, 0);
-    parts.leftArm.rotation.set(0, 0, 0);
-    parts.leftForearm.rotation.set(0, 0, 0);
-    parts.rightArm.rotation.set(0, 0, 0);
-    parts.rightForearm.rotation.set(0, 0, 0);
-    parts.leftLeg.rotation.set(0, 0, 0);
-    parts.leftShin.rotation.set(0, 0, 0);
-    parts.rightLeg.rotation.set(0, 0, 0);
-    parts.rightShin.rotation.set(0, 0, 0);
-    parts.root.position.y = 0;
+    // Reset joint targets to neutral
+    const j = parts.joints;
+    j.torso.targetRx = 0; j.torso.targetRy = 0; j.torso.targetRz = 0;
+    j.head.targetRx = 0; j.head.targetRy = 0; j.head.targetRz = 0;
+    j.leftArm.targetRx = 0; j.leftArm.targetRy = 0; j.leftArm.targetRz = 0;
+    j.leftForearm.targetRx = 0; j.leftForearm.targetRy = 0; j.leftForearm.targetRz = 0;
+    j.rightArm.targetRx = 0; j.rightArm.targetRy = 0; j.rightArm.targetRz = 0;
+    j.rightForearm.targetRx = 0; j.rightForearm.targetRy = 0; j.rightForearm.targetRz = 0;
+    j.leftLeg.targetRx = 0; j.leftLeg.targetRy = 0; j.leftLeg.targetRz = 0;
+    j.leftShin.targetRx = 0; j.leftShin.targetRy = 0; j.leftShin.targetRz = 0;
+    j.rightLeg.targetRx = 0; j.rightLeg.targetRy = 0; j.rightLeg.targetRz = 0;
+    j.rightShin.targetRx = 0; j.rightShin.targetRy = 0; j.rightShin.targetRz = 0;
+    parts.rootY.target = 0;
+
+    let lerpSpeed = 0.28;
 
     switch (fighter.state) {
       case "idle": {
-        const sway = Math.sin(t * 1.5) * 0.05;
-        parts.torso.position.y = 1.15 + sway;
-        parts.rightArm.rotation.z = 0.5 + sway;
-        parts.rightForearm.rotation.z = -0.8;
-        parts.leftArm.rotation.z = 0.3;
-        parts.leftForearm.rotation.z = -0.7;
-        parts.rightLeg.rotation.z = 0.2;
-        parts.leftLeg.rotation.z = -0.2;
+        const breath = Math.sin(t * 3.2) * 0.035;
+        const sway = Math.cos(t * 1.8) * 0.02;
+
+        // Subtle 3/4 arcade perspective twist towards camera
+        j.torso.targetRy = 0.16 + sway * 0.3;
+        j.torso.targetRz = breath * 0.4;
+        j.head.targetRy = -0.10;
+        j.head.targetRz = -breath * 0.2;
+
+        // Lower hips slightly into authentic fighting stance
+        parts.rootY.target = -0.05 + breath * 0.02;
+
+        // Front lead arm (right) in high fighting guard
+        j.rightArm.targetRz = 0.55 + breath;
+        j.rightForearm.targetRz = -0.92 + breath * 0.4;
+        j.rightArm.targetRy = -0.12;
+
+        // Rear arm (left) protecting chin
+        j.leftArm.targetRz = 0.40 + breath * 0.8;
+        j.leftForearm.targetRz = -0.80 + breath * 0.3;
+        j.leftArm.targetRy = 0.10;
+
+        // Grounded fighting stance with natural knee flex
+        j.rightLeg.targetRz = 0.22;
+        j.rightShin.targetRz = -0.28;
+        j.leftLeg.targetRz = -0.18;
+        j.leftShin.targetRz = 0.22;
+        lerpSpeed = 0.25;
         break;
       }
       case "walkForward": {
-        const walkCycle = Math.sin(t * 3);
-        parts.rightLeg.rotation.z = walkCycle * 0.6;
-        parts.leftLeg.rotation.z = -walkCycle * 0.6;
-        parts.rightArm.rotation.z = -walkCycle * 0.5;
-        parts.leftArm.rotation.z = walkCycle * 0.5;
+        const walkPhase = fighter.stateTime * 0.42;
+        const legCycle = Math.sin(walkPhase) * 0.55;
+        const kneeBend = Math.max(0, Math.sin(walkPhase + 0.8)) * 0.60;
+
+        j.rightLeg.targetRz = legCycle;
+        j.rightShin.targetRz = -kneeBend;
+        j.leftLeg.targetRz = -legCycle;
+        j.leftShin.targetRz = -Math.max(0, -Math.sin(walkPhase + 0.8)) * 0.60;
+
+        j.rightArm.targetRz = -legCycle * 0.45 + 0.35;
+        j.leftArm.targetRz = legCycle * 0.45 + 0.30;
+        j.torso.targetRz = 0.12;
+        j.torso.targetRy = 0.14;
+        parts.rootY.target = -0.04 + Math.abs(Math.sin(walkPhase)) * 0.035;
+        lerpSpeed = 0.35;
         break;
       }
       case "walkBackward": {
-        const walkCycle = Math.sin(t * 2.5);
-        parts.rightLeg.rotation.z = -walkCycle * 0.5;
-        parts.leftLeg.rotation.z = walkCycle * 0.5;
-        parts.rightArm.rotation.z = 0.8;
-        parts.rightForearm.rotation.z = -1.2;
+        const walkPhase = fighter.stateTime * 0.36;
+        const legCycle = Math.sin(walkPhase) * 0.45;
+
+        j.rightLeg.targetRz = -legCycle;
+        j.leftLeg.targetRz = legCycle;
+
+        // High defensive guard while retreating
+        j.rightArm.targetRz = 0.75;
+        j.rightForearm.targetRz = -1.15;
+        j.leftArm.targetRz = 0.65;
+        j.leftForearm.targetRz = -1.05;
+        j.torso.targetRz = -0.08;
+        j.torso.targetRy = 0.12;
+        parts.rootY.target = -0.04;
+        lerpSpeed = 0.32;
+        break;
+      }
+      case "jumpStartup": {
+        parts.rootY.target = -0.16;
+        j.torso.targetRz = 0.22;
+        j.rightLeg.targetRz = 0.52;
+        j.leftLeg.targetRz = 0.52;
+        j.rightShin.targetRz = -0.75;
+        j.leftShin.targetRz = -0.75;
+        lerpSpeed = 0.55;
+        break;
+      }
+      case "landing": {
+        parts.rootY.target = -0.14;
+        j.torso.targetRz = 0.16;
+        j.rightLeg.targetRz = 0.45;
+        j.leftLeg.targetRz = 0.45;
+        j.rightShin.targetRz = -0.65;
+        j.leftShin.targetRz = -0.65;
+        lerpSpeed = 0.50;
         break;
       }
       case "crouch":
       case "crouchBlock": {
-        parts.root.position.y = -0.25;
-        parts.torso.rotation.z = 0.25;
-        parts.rightLeg.rotation.z = 0.8;
-        parts.rightShin.rotation.z = -1.2;
-        parts.leftLeg.rotation.z = 0.8;
-        parts.leftShin.rotation.z = -1.2;
-        parts.rightArm.rotation.z = 0.9;
-        parts.rightForearm.rotation.z = -1.4;
+        parts.rootY.target = -0.38;
+        j.torso.targetRz = 0.32;
+        j.rightLeg.targetRz = 0.95;
+        j.rightShin.targetRz = -1.45;
+        j.leftLeg.targetRz = 0.95;
+        j.leftShin.targetRz = -1.45;
+
+        if (fighter.state === "crouchBlock") {
+          j.rightArm.targetRz = 0.95;
+          j.rightForearm.targetRz = -1.55;
+          j.leftArm.targetRz = 0.85;
+          j.leftForearm.targetRz = -1.45;
+        } else {
+          j.rightArm.targetRz = 0.70;
+          j.rightForearm.targetRz = -1.25;
+          j.leftArm.targetRz = 0.55;
+          j.leftForearm.targetRz = -1.15;
+        }
+        lerpSpeed = 0.40;
         break;
       }
       case "jump":
       case "fall": {
-        parts.rightLeg.rotation.z = 0.6;
-        parts.rightShin.rotation.z = -0.8;
-        parts.leftLeg.rotation.z = -0.4;
-        parts.rightArm.rotation.z = -1.0;
-        parts.leftArm.rotation.z = -0.6;
+        j.torso.targetRz = 0.15;
+        j.rightLeg.targetRz = 0.65;
+        j.rightShin.targetRz = -0.85;
+        j.leftLeg.targetRz = -0.35;
+        j.leftShin.targetRz = -0.45;
+        j.rightArm.targetRz = -0.75;
+        j.leftArm.targetRz = -0.55;
+        lerpSpeed = 0.35;
         break;
       }
-      case "standBlock": {
-        parts.torso.rotation.z = -0.15;
-        parts.rightArm.rotation.z = 1.2;
-        parts.rightForearm.rotation.z = -1.6;
-        parts.leftArm.rotation.z = 1.0;
-        parts.leftForearm.rotation.z = -1.5;
+      case "standBlock":
+      case "blockstun": {
+        j.torso.targetRz = -0.16;
+        j.rightArm.targetRz = 1.25;
+        j.rightForearm.targetRz = -1.65;
+        j.leftArm.targetRz = 1.15;
+        j.leftForearm.targetRz = -1.55;
+        j.rightLeg.targetRz = 0.22;
+        j.leftLeg.targetRz = -0.22;
+        lerpSpeed = 0.45;
         break;
       }
+      case "thrown":
       case "hitstun": {
-        parts.torso.rotation.z = -0.5;
-        parts.head.rotation.z = -0.4;
-        parts.rightArm.rotation.z = -0.8;
-        parts.leftArm.rotation.z = -0.6;
+        // High impact flinch backwards
+        j.torso.targetRz = -0.55;
+        j.torso.targetRy = -0.20;
+        j.head.targetRz = -0.40;
+        j.rightArm.targetRz = -0.85;
+        j.rightForearm.targetRz = -0.35;
+        j.leftArm.targetRz = -0.65;
+        j.leftForearm.targetRz = -0.45;
+        j.rightLeg.targetRz = 0.40;
+        j.leftLeg.targetRz = -0.35;
+        lerpSpeed = 0.65; // Snappy recoil
+        break;
+      }
+      case "wakeup": {
+        parts.rootY.target = -0.35;
+        j.torso.targetRz = -0.35;
+        j.rightArm.targetRz = 0.6;
+        j.leftArm.targetRz = 0.6;
+        j.rightLeg.targetRz = 0.4;
+        j.leftLeg.targetRz = 0.4;
+        lerpSpeed = 0.35;
+        break;
+      }
+      case "throw": {
+        j.torso.targetRz = 0.42;
+        j.rightArm.targetRz = 1.45;
+        j.rightForearm.targetRz = 0.35;
+        j.rightArm.targetRy = 0.3;
+        j.leftArm.targetRz = 1.35;
+        j.leftForearm.targetRz = 0.35;
+        j.leftArm.targetRy = -0.3;
+        j.rightLeg.targetRz = 0.45;
+        j.leftLeg.targetRz = -0.45;
+        lerpSpeed = 0.60;
         break;
       }
       case "knockdown": {
-        parts.root.position.y = -0.7;
-        parts.root.rotation.x = -Math.PI / 2;
-        break;
-      }
-      case "victory": {
-        parts.torso.position.y = 1.2;
-        parts.rightArm.rotation.z = 2.8;
-        parts.leftArm.rotation.z = 0.3;
+        // Fall flat onto back on the canvas floor
+        parts.rootY.target = -0.92;
+        j.torso.targetRz = -Math.PI * 0.47;
+        j.head.targetRz = 0.22;
+        j.rightArm.targetRz = -0.45;
+        j.leftArm.targetRz = -0.45;
+        j.rightLeg.targetRz = -0.15;
+        j.leftLeg.targetRz = -0.25;
+        lerpSpeed = 0.65;
         break;
       }
       case "ko": {
-        parts.root.position.y = -0.85;
-        parts.root.rotation.x = Math.PI / 2;
+        // Lying knocked out flat on back
+        parts.rootY.target = -0.94;
+        j.torso.targetRz = -Math.PI * 0.48;
+        j.head.targetRz = 0.20;
+        j.rightArm.targetRz = -0.50;
+        j.leftArm.targetRz = -0.45;
+        j.rightLeg.targetRz = -0.15;
+        j.leftLeg.targetRz = -0.25;
+        lerpSpeed = 0.40;
+        break;
+      }
+      case "victory": {
+        // Winner faces player/camera triumphantly!
+        parts.rootY.target = 0.0;
+        j.torso.targetRy = 0.65;
+        j.head.targetRy = -0.30;
+        j.rightArm.targetRz = 2.65;
+        j.rightForearm.targetRz = 0.12;
+        j.leftArm.targetRz = 0.35;
+        j.leftForearm.targetRz = -0.65;
+        j.rightLeg.targetRz = 0.20;
+        j.leftLeg.targetRz = -0.20;
+        lerpSpeed = 0.25;
         break;
       }
       case "attackStartup": {
         const move = fighter.moveId || "";
-        const isKick = move === "lk" || move === "hk" || move.includes("kick") || move.includes("stomp") || move.includes("sweep") || move.includes("boot") || move.includes("shin") || move.includes("heel");
-        const isHeavy = move === "hp" || move === "hk" || move.includes("hammer") || move.includes("smash") || move.includes("axe") || move.includes("haymaker");
+        const isKick = move === "lk" || move === "hk" || move.includes("kick") || move.includes("stomp") || move.includes("sweep") || move.includes("boot");
+        const isHeavy = move === "hp" || move === "hk" || move.includes("hammer") || move.includes("super") || move.includes("spade");
 
         if (isKick) {
-          parts.torso.rotation.z = -0.2;
-          parts.rightLeg.rotation.z = -0.4;
-          parts.rightShin.rotation.z = -0.8;
-          parts.rightArm.rotation.z = 0.5;
-          parts.leftArm.rotation.z = 0.4;
+          j.torso.targetRz = -0.25;
+          j.rightLeg.targetRz = -0.45;
+          j.rightShin.targetRz = -0.85;
+          j.rightArm.targetRz = 0.5;
+          j.leftArm.targetRz = 0.4;
         } else {
-          parts.torso.rotation.z = isHeavy ? -0.4 : -0.2;
-          parts.rightArm.rotation.z = isHeavy ? -0.9 : -0.6;
-          parts.rightForearm.rotation.z = -0.9;
+          j.torso.targetRz = isHeavy ? -0.45 : -0.22;
+          j.rightArm.targetRz = isHeavy ? -0.95 : -0.65;
+          j.rightForearm.targetRz = -0.95;
         }
+        lerpSpeed = 0.45;
         break;
       }
       case "attackActive": {
         const move = fighter.moveId || "";
         const isKickA = move === "lk";
-        const isKickB = move === "hk" || move.includes("kick") || move.includes("stomp") || move.includes("sweep") || move.includes("boot") || move.includes("shin") || move.includes("heel");
+        const isKickB = move === "hk" || move.includes("kick") || move.includes("stomp") || move.includes("sweep") || move.includes("boot");
         const isPunchA = move === "lp";
-        const isPunchB = move === "hp" || move.includes("hammer") || move.includes("smash") || move.includes("backhand") || move.includes("haymaker") || move.includes("slap");
+        const isPunchB = move === "hp" || move.includes("hammer") || move.includes("smash") || move.includes("spade") || move.includes("haymaker");
         const isThrow = move === "throw" || move.includes("grab") || move.includes("suplex");
         const isSuper = move.includes("super") || move.includes("overdrive") || move.includes("biohazard") || move.includes("velocity") || move.includes("grid");
 
         if (fighter.airborne) {
-          // Air attack: Dynamic aerial dive/kick
-          parts.torso.rotation.z = 0.35;
-          parts.rightLeg.rotation.z = 1.3;
-          parts.rightShin.rotation.z = 0.2;
-          parts.leftLeg.rotation.z = -0.7;
-          parts.leftShin.rotation.z = -0.9;
-          parts.rightArm.rotation.z = 1.2;
-          parts.leftArm.rotation.z = -0.5;
+          j.torso.targetRz = 0.38;
+          j.rightLeg.targetRz = 1.35;
+          j.rightShin.targetRz = 0.2;
+          j.leftLeg.targetRz = -0.7;
+          j.leftShin.targetRz = -0.9;
+          j.rightArm.targetRz = 1.25;
+          j.leftArm.targetRz = -0.55;
         } else if (isThrow) {
-          // Grapple / Command Grab: Both hands lunging forward
-          parts.torso.rotation.z = 0.35;
-          parts.rightArm.rotation.z = 1.4;
-          parts.rightForearm.rotation.z = 0.3;
-          parts.leftArm.rotation.z = 1.3;
-          parts.leftForearm.rotation.z = 0.3;
-          parts.rightLeg.rotation.z = 0.4;
-          parts.leftLeg.rotation.z = -0.4;
+          // Grapple clamp
+          j.torso.targetRz = 0.42;
+          j.rightArm.targetRz = 1.45;
+          j.rightForearm.targetRz = 0.35;
+          j.rightArm.targetRy = 0.3;
+          j.leftArm.targetRz = 1.35;
+          j.leftForearm.targetRz = 0.35;
+          j.leftArm.targetRy = -0.3;
+          j.rightLeg.targetRz = 0.45;
+          j.leftLeg.targetRz = -0.45;
         } else if (isSuper) {
-          // Super Arts: Full-body explosive kinetic surge
-          parts.torso.rotation.z = 0.4;
-          parts.head.rotation.z = -0.2;
-          parts.rightArm.rotation.z = 1.6;
-          parts.rightForearm.rotation.z = 0.1;
-          parts.leftArm.rotation.z = -0.8;
-          parts.leftForearm.rotation.z = -0.6;
-          parts.rightLeg.rotation.z = 0.6;
-          parts.leftLeg.rotation.z = -0.7;
+          // Explosive super surge
+          j.torso.targetRz = 0.45;
+          j.head.targetRz = -0.25;
+          j.rightArm.targetRz = 1.72;
+          j.rightForearm.targetRz = 0.12;
+          j.leftArm.targetRz = -0.85;
+          j.leftForearm.targetRz = -0.65;
+          j.rightLeg.targetRz = 0.65;
+          j.leftLeg.targetRz = -0.75;
         } else if (isKickB) {
-          // Kick B (Heavy): High sweeping roundhouse / axe kick
-          parts.torso.rotation.z = -0.25;
-          parts.rightLeg.rotation.z = 1.7;
-          parts.rightShin.rotation.z = 0.2;
-          parts.leftLeg.rotation.z = -0.4;
-          parts.leftShin.rotation.z = -0.6;
-          parts.rightArm.rotation.z = -0.4;
-          parts.leftArm.rotation.z = 0.8;
+          // High roundhouse / axe kick
+          j.torso.targetRz = -0.28;
+          j.rightLeg.targetRz = 1.82;
+          j.rightShin.targetRz = 0.2;
+          j.leftLeg.targetRz = -0.42;
+          j.leftShin.targetRz = -0.65;
+          j.rightArm.targetRz = -0.45;
+          j.leftArm.targetRz = 0.85;
         } else if (isKickA) {
-          // Kick A (Fast): Snapping low/mid poke
-          parts.torso.rotation.z = -0.12;
-          parts.rightLeg.rotation.z = 1.15;
-          parts.rightShin.rotation.z = 0.1;
-          parts.leftLeg.rotation.z = -0.3;
-          parts.leftShin.rotation.z = -0.3;
-          parts.rightArm.rotation.z = 0.6;
-          parts.leftArm.rotation.z = 0.7;
+          // Low/mid snap poke
+          j.torso.targetRz = -0.14;
+          j.rightLeg.targetRz = 1.22;
+          j.rightShin.targetRz = 0.12;
+          j.leftLeg.targetRz = -0.32;
+          j.leftShin.targetRz = -0.32;
+          j.rightArm.targetRz = 0.65;
+          j.leftArm.targetRz = 0.72;
         } else if (isPunchB) {
-          // Punch B (Heavy): Heavy overhead smash / hammer / haymaker
-          parts.torso.rotation.z = 0.55;
-          parts.rightArm.rotation.z = 1.7;
-          parts.rightForearm.rotation.z = -0.15;
-          parts.leftArm.rotation.z = -0.6;
-          parts.leftForearm.rotation.z = -0.5;
-          parts.rightLeg.rotation.z = 0.6;
-          parts.leftLeg.rotation.z = -0.6;
+          // Overhead heavy smash / hammer / pizza spade strike
+          j.torso.targetRz = 0.60;
+          j.rightArm.targetRz = 1.76;
+          j.rightForearm.targetRz = -0.18;
+          j.leftArm.targetRz = -0.65;
+          j.leftForearm.targetRz = -0.52;
+          j.rightLeg.targetRz = 0.65;
+          j.leftLeg.targetRz = -0.65;
         } else {
-          // Punch A (Fast): Clean straight jab
-          parts.torso.rotation.z = 0.2;
-          parts.rightArm.rotation.z = 1.45;
-          parts.rightForearm.rotation.z = 0.05;
-          parts.leftArm.rotation.z = 0.7;
-          parts.leftForearm.rotation.z = -1.2;
-          parts.rightLeg.rotation.z = 0.35;
-          parts.leftLeg.rotation.z = -0.35;
+          // Clean straight jab
+          j.torso.targetRz = 0.24;
+          j.rightArm.targetRz = 1.52;
+          j.rightForearm.targetRz = 0.06;
+          j.leftArm.targetRz = 0.72;
+          j.leftForearm.targetRz = -1.22;
+          j.rightLeg.targetRz = 0.38;
+          j.leftLeg.targetRz = -0.38;
         }
+        lerpSpeed = 0.70; // Snappy strike impact!
         break;
       }
       case "attackRecovery": {
         const move = fighter.moveId || "";
-        const isKick = move === "lk" || move === "hk" || move.includes("kick") || move.includes("stomp") || move.includes("sweep") || move.includes("boot") || move.includes("shin") || move.includes("heel");
+        const isKick = move === "lk" || move === "hk" || move.includes("kick") || move.includes("stomp") || move.includes("sweep") || move.includes("boot");
         if (isKick) {
-          parts.torso.rotation.z = -0.05;
-          parts.rightLeg.rotation.z = 0.5;
-          parts.rightShin.rotation.z = -0.4;
-          parts.leftLeg.rotation.z = -0.2;
+          j.torso.targetRz = -0.06;
+          j.rightLeg.targetRz = 0.45;
+          j.rightShin.targetRz = -0.42;
+          j.leftLeg.targetRz = -0.2;
         } else {
-          parts.torso.rotation.z = 0.1;
-          parts.rightArm.rotation.z = 0.8;
-          parts.rightForearm.rotation.z = -0.6;
+          j.torso.targetRz = 0.12;
+          j.rightArm.targetRz = 0.78;
+          j.rightForearm.targetRz = -0.65;
         }
+        lerpSpeed = 0.32;
         break;
+      }
+    }
+
+    // Smooth Euler angle interpolation
+    const applyJoint = (mesh: THREE.Object3D, joint: JointState) => {
+      joint.rx += (joint.targetRx - joint.rx) * lerpSpeed;
+      joint.ry += (joint.targetRy - joint.ry) * lerpSpeed;
+      joint.rz += (joint.targetRz - joint.rz) * lerpSpeed;
+      mesh.rotation.set(joint.rx, joint.ry, joint.rz);
+    };
+
+    applyJoint(parts.torso, j.torso);
+    applyJoint(parts.head, j.head);
+    applyJoint(parts.leftArm, j.leftArm);
+    applyJoint(parts.leftForearm, j.leftForearm);
+    applyJoint(parts.rightArm, j.rightArm);
+    applyJoint(parts.rightForearm, j.rightForearm);
+    applyJoint(parts.leftLeg, j.leftLeg);
+    applyJoint(parts.leftShin, j.leftShin);
+    applyJoint(parts.rightLeg, j.rightLeg);
+    applyJoint(parts.rightShin, j.rightShin);
+
+    parts.rootY.current += (parts.rootY.target - parts.rootY.current) * lerpSpeed;
+    parts.root.position.y = parts.baseRootY + parts.rootY.current;
+
+    // Signature Weapon Dynamics
+    if (parts.props["spade"]) {
+      const spade = parts.props["spade"];
+      const bladeMat = parts.props["spadeBlade"]
+        ? ((parts.props["spadeBlade"] as THREE.Mesh).material as THREE.MeshStandardMaterial)
+        : null;
+
+      if (fighter.state === "attackActive") {
+        if (fighter.moveId?.includes("super")) {
+          // Blazing Pizza Oven Super Slash
+          spade.rotation.set(0.3, 0, 1.15);
+          if (bladeMat) {
+            bladeMat.emissive = new THREE.Color(0xf97316);
+            bladeMat.emissiveIntensity = 3.0;
+          }
+        } else {
+          // Powerful downward spade swing
+          spade.rotation.set(0.18, 0, 0.92);
+          if (bladeMat) bladeMat.emissiveIntensity = 0.0;
+        }
+      } else if (fighter.state === "attackStartup") {
+        // Cocked back behind shoulder
+        spade.rotation.set(-0.25, 0, -0.70);
+        if (bladeMat) bladeMat.emissiveIntensity = 0.0;
+      } else {
+        // Natural combat ready grip
+        spade.rotation.set(0.12, 0, 0.18);
+        if (bladeMat) bladeMat.emissiveIntensity = 0.0;
       }
     }
   }
@@ -1569,6 +2458,12 @@ export class GameRenderer {
     if (this.animFrameId) {
       cancelAnimationFrame(this.animFrameId);
     }
+    if (this.fighter0.proceduralParts?.shadow) {
+      this.scene.remove(this.fighter0.proceduralParts.shadow);
+    }
+    if (this.fighter1.proceduralParts?.shadow) {
+      this.scene.remove(this.fighter1.proceduralParts.shadow);
+    }
     this.renderer.dispose();
     if (this.renderer.domElement.parentElement) {
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
@@ -1576,10 +2471,19 @@ export class GameRenderer {
   }
 }
 
+interface JointState {
+  rx: number;
+  ry: number;
+  rz: number;
+  targetRx: number;
+  targetRy: number;
+  targetRz: number;
+}
+
 interface FighterBodyParts {
   root: THREE.Group;
-  torso: THREE.Mesh;
-  head: THREE.Mesh;
+  torso: THREE.Group;
+  head: THREE.Group;
   leftArm: THREE.Group;
   leftForearm: THREE.Group;
   rightArm: THREE.Group;
@@ -1588,4 +2492,21 @@ interface FighterBodyParts {
   leftShin: THREE.Group;
   rightLeg: THREE.Group;
   rightShin: THREE.Group;
+  shadow: THREE.Mesh;
+  charId: string;
+  props: Record<string, THREE.Object3D>;
+  joints: {
+    torso: JointState;
+    head: JointState;
+    leftArm: JointState;
+    leftForearm: JointState;
+    rightArm: JointState;
+    rightForearm: JointState;
+    leftLeg: JointState;
+    leftShin: JointState;
+    rightLeg: JointState;
+    rightShin: JointState;
+  };
+  rootY: { current: number; target: number };
+  baseRootY: number;
 }

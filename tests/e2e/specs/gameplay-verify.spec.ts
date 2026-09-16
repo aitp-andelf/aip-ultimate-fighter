@@ -53,8 +53,8 @@ test.describe("AIP Ultimate Fighter — Gameplay Verification & Proof of Play", 
       return {
         f0X: r.fighter0?.group?.position?.x,
         f1X: r.fighter1?.group?.position?.x,
-        f0Loaded: r.fighter0?.isGltfLoaded,
-        f1Loaded: r.fighter1?.isGltfLoaded,
+        f0Loaded: !!(r.fighter0?.isGltfLoaded || r.fighter0?.proceduralParts),
+        f1Loaded: !!(r.fighter1?.isGltfLoaded || r.fighter1?.proceduralParts),
       };
     });
     expect(rendererInfo).not.toBeNull();

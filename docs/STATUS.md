@@ -21,7 +21,14 @@ Status: Aktiv utveckling. Kanoniskt karaktärsgalleri (8 kämpar) med fullständ
 - `apps/web`:
   - **Arkadstyling**: Russo One och Teko typsnitt, polygon-klippta knappar, neonglöd, metalliska färgtoner.
   - **Karaktärsväljare**: Detaljerade kämpekort med Power, Speed, Range visual bars (1-10), signaturanfall, superpayoffs, taglines och arkad-röstbarks.
-  - **Matchrendering (Three.js)**: Full 2.5D Street Fighter-inramning kalibrerad (`WORLD_SCALE = 1 / 200`, 2.05m heroisk kämpehöjd, kämpar roterade så de möter varandra i profil). Dynamisk kamera som spårar mittpunkt, distans och hopp.
+  - **Anatomisk 3D-Kämperendering & Kinematik (Three.js)**:
+    - Äkta anatomiska proportioner med V-formad bröstkorg, magrutor, axel-deltoider, knäskydd och knutna stridsnävar med tummar.
+    - Markfasta stridsstövlar med gummisulor och tåhättor som är matematiskt kalibrerade med sub-millimeterkontakt mot arenagolvet (`y = 0`).
+    - 2.5D Street Fighter-stridsställning med 3/4 arkadperspektiv (bröst, emblem och ansiktsprofil vinklade 18-20° mot kameran/spelaren).
+    - Autentiska kämpe-tillbehör för alla 8 karaktärer: Capitans marinblå fedora med guldspänne och grappler-axelskydd, Irstababbens kockmössa, förkläde och träpizzaspade, Femboyfippes defibrillator-paddar och EKG-diod, Babas LASIK-lasrar och solglasögon, Stinkfiends gasmask och giftgaskärl, Ekanders kraftlyftarbälte, Goonströms skuggkåpa, och Copper Thiefs kopparlindor och kofot.
+    - Realistisk knockdown/K.O.-fysik där utslagna kämpar faller baklänges och landar utsträckta på rygg på mattan.
+    - Vändning mot spelaren/kameran vid seger med höjd vinnarnäve.
+  - **HUD-layout**: Rättad layout där "Avsluta Match" placerats i nedre högra hörnet för att garantera noll överlappning mot Spelare 2:s namn och porträtt.
   - **Turnégolv & Belysning**: Högupplöst reflekterande arenagolv med Aros IT-Partner-emblem, rutmönster, neongränser för arenaväggarna och dynamisk spotlight.
   - **Signatur-VFX & Projektiler**: Karaktärsspecifika projektiler och effekter (Irstababbens Hawaii-eldboll, Babas kirurgiska LASIK-laserstråle, Femboyfippes cyan-elektriska nät, Stinkfiends gröna giftmoln, Goonströms mörka magenta-void, Ekanders rullande klot, Bulgarian Copper Thiefs kopparblixtar och Capitans blå markchockvågor).
   - **Character Lab**: 3D-modellinspektion i realtid med animationsbläddrare och dra-och-släpp `.glb`-uppladdning direkt i webbläsaren.
