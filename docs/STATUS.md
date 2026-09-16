@@ -1,26 +1,28 @@
 # AIP Ultimate Fighter — Aktuellt läge
 
 Datum: 2026-09-16
-Status: Version 1 färdigställd och fullständigt verifierad.
+Status: Aktiv utveckling. Riggade 3D-modeller, 4 arenabakgrunder och stridseffekter är implementerade och testade mot E2E och enhetstester.
 
-## Modulstatus
+## Aktuellt läge per modul
 
-- `packages/contracts`: Färdig och verifierad. Protokoll, Zod-scheman, ID:n och delade meddelandetyper. 3/3 enhetstester passerar. Byggd och typcheckad.
-- `packages/content`: Färdig och verifierad. Samtliga 8 karaktärsprofiler implementerade (Patchare, Switch, Helpdesk, Sprint, Kabel, Rack, Mesh, Cloud) med 4 banor (Serverhallen, Fikarummet, Kontorslandskapet, Konferensrummet). 4/4 enhetstester passerar. Byggd och typcheckad.
-- `packages/sim`: Färdig och verifierad. Enda stridsauktoriteten. 60 Hz fixed-point (1000 subunits/unit), deterministisk motor, FNV-1a 32-bit state-hash, inputbuffert, pushbox-krock/väggar, riktningsblockering (hög/låg/overhead), kast/throw tech, projektiler/zoner, hitstop, hitstun, blockstun, wakeup-odödlighet, supermätare (nollställs vid ny rond), chip damage som ej kan KO:a, och bot-AI controller. 10/10 enhets- och bottester passerar. Byggd och typcheckad.
-- `apps/server`: Färdig och verifierad. Colyseus 0.16.5 med WebSocket-transport. MatchRoom hanterar 2 aktiva slots (P1/P2), FIFO-kö, åskådare, återanslutningsgrace, auktoritativa inputs och snapshots via 60 Hz tick-loop. Endpoints `/health` och `/api/info` aktiva. 2/2 integrationstester passerar. Byggd och typcheckad.
-- `apps/web`: Färdig och verifierad med Street Fighter-nivå på grafik och polish. React 19 menyer och Three.js 2.5D-matchrendering utanför React-state. Riggade 3D GLTF-modeller (`RobotExpressive.glb`, `Xbot.glb`, `Soldier.glb`, `Michelle.glb`) med `AnimationMixer` för mjuka animationer direkt kopplade till simuleringslägen (idle, walk, dash, punch, block, jump, hitstun, death, victory). Automatisk höjdnormalisering (1.85m), dynamisk materialfärgning per spelar- och karaktärspalett, samt proceduriell noll-latens-fallback. 4 fotorealistiska genererade 2.5D-arenor (Serverhallen, Fikarummet, Kontorslandskapet, Konferensrummet) med dynamisk ljussättning, reflekterande arenagolv och stämningsfulla partiklar. Uppgraderad HUD med tvådelade livmätare med eftersläpande röd skademätare, karaktärsporträtt, dynamiska comboräknare, skärmskak (screen shake), hit-stop (frysramar vid tunga träffar) och additiva gnist- och träffeffekter. Självförsörjande Web Audio-syntes för SFX och BGM. Byggd felfritt med Vite 7.
-- `tools/assets`: Färdig och verifierad. Character Lab paketvalidering och importverktyg via CLI (`pnpm import-character`). 2/2 enhetstester passerar. Byggd och typcheckad.
-- `tests/e2e`: Färdig och verifierad. Playwright-tester körda i systemets Chrome (`channel: "chrome"`) med tre browser contexts (P1, P2 och Spectator). 4/4 tester passerar (lokal match, träningsläge, online multiplayer 1v1 + åskådare, SharePoint-embed).
+- `packages/contracts`: Protokoll, Zod-scheman, ID:n och delade meddelandetyper. 3/3 enhetstester passerar. Byggd och typcheckad.
+- `packages/content`: 8 definierade karaktärer och 4 banor med movesets och framedata. 4/4 enhetstester passerar. Byggd och typcheckad.
+- `packages/sim`: 60 Hz fixed-point motor (1000 subunits/unit), deterministisk simuleringsauktoritet, inputbuffert, pushboxar, riktningsblockering, kast/throw tech, projektiler/zoner, hitstop, hitstun, supermätare. 10/10 enhets- och bottester passerar. Byggd och typcheckad.
+- `apps/server`: Colyseus 0.16.5 med WebSocket. MatchRoom med 2 aktiva slots, FIFO-kö, åskådare och 60 Hz tick-loop. 2/2 integrationstester passerar. Byggd och typcheckad.
+- `apps/web`: React 19 och Three.js 2.5D-matchrendering. Riggade 3D GLTF-modeller (`RobotExpressive.glb`, `Xbot.glb`, `Soldier.glb`, `Michelle.glb`) med `AnimationMixer` synkade mot simuleringslägen. 4 genererade arenabakgrunder med reflekterande golv, dynamiskt arenagolvljus och svävande partiklar. Tvådelade livmätare med eftersläpande röd skademätare, karaktärsporträtt, skärmskak, hit-stop och gnistpartiklar. Web Audio SFX och BGM. Byggd felfritt med Vite 7.
+- `tools/assets`: Character Lab CLI-importör (`pnpm import-character`). 2/2 enhetstester passerar. Byggd och typcheckad.
+- `tests/e2e`: 4/4 Playwright-tester passerar i systemets Google Chrome (Lokal match, Träningsläge, Online multiplayer 1v1 med åskådare, SharePoint-läge).
 
 ## Verifiering
 
-- `pnpm build`: Grönt (alla paket byggda).
-- `pnpm typecheck`: Grönt (alla TypeScript-paket utan fel).
-- `pnpm test`: 19 tester gröna (sim, content, contracts, server).
-- `pnpm test:e2e`: 4 webbläsartester gröna i Google Chrome (15.2s).
-- `pnpm import-character fixtures/sample_character.json`: Validerar och importerar korrekt.
+- `pnpm build`: Bygger alla paket utan fel.
+- `pnpm typecheck`: Typcheckar alla paket utan fel.
+- `pnpm test`: 19/19 enhets- och integrationstester passerar.
+- `pnpm test:e2e`: 4/4 webbläsartester passerar i Google Chrome.
 
-## Blockeringar
+## Identifierade områden för vidare fördjupning (Scope & Polish)
 
-Inga. Samtliga delmål och höga kvalitetskrav för Version 1 är uppfyllda.
+1. **Röstutrop (Announcer)**: Införa syntetiserat eller talsyntes-announcer ("Round 1... Fight!", "K.O.!", "Counter Hit!") för äkta arkadkänsla.
+2. **Webb-baserad 3D-modelluppladdning i Character Lab**: Möjliggöra att dra och släppa egna `.glb`-filer direkt i webbläsaren för inspektion och applicering på kämpar.
+3. **Fler attackspecifika animationer**: Ytterligare differentiering mellan lätta/tunga slag, sparkar, svep och kast.
+4. **Motion Inputs i bufferten**: Stöd för klassiska fighting game inputs (kvartscirkel framåt 236, DP 623).

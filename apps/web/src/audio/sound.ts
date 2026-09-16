@@ -174,6 +174,7 @@ class SoundSystem {
 
       osc.start();
       osc.stop(ctx.currentTime + 0.8);
+      this.announce("K.O.!");
     } catch {}
   }
 
@@ -196,6 +197,24 @@ class SoundSystem {
 
       osc.start();
       osc.stop(ctx.currentTime + 0.3);
+      this.announce("FIGHT!");
+    } catch {}
+  }
+
+  public announce(text: string): void {
+    if (!this.enabled || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.2;
+      utterance.pitch = 0.9;
+      utterance.volume = Math.min(1.0, this.sfxVolume * 1.2);
+      const voices = window.speechSynthesis.getVoices();
+      const english = voices.find(
+        (v) => v.lang.startsWith("en") && !v.name.toLowerCase().includes("whisper")
+      );
+      if (english) utterance.voice = english;
+      window.speechSynthesis.speak(utterance);
     } catch {}
   }
 
