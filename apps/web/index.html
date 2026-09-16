@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" href="/logo.png" />
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Russo+One&family=Teko:wght@600;700&family=Inter:wght@400;600;700;900&display=swap');
       body {
         font-family: 'Inter', system-ui, sans-serif;
         margin: 0;
@@ -15,6 +15,31 @@
         overflow: hidden;
         user-select: none;
         background-color: #020617;
+      }
+      .font-arcade {
+        font-family: 'Russo One', sans-serif;
+      }
+      .font-teko {
+        font-family: 'Teko', sans-serif;
+      }
+      .arcade-skew {
+        transform: skew(-8deg);
+      }
+      .arcade-skew-reverse {
+        transform: skew(8deg);
+      }
+      .arcade-btn-clip {
+        clip-path: polygon(14px 0%, 100% 0%, calc(100% - 14px) 100%, 0% 100%);
+      }
+      .text-arcade-gold {
+        background: linear-gradient(180deg, #fffbeb 0%, #fef08a 25%, #eab308 60%, #a16207 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      .text-arcade-chrome {
+        background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 35%, #64748b 70%, #334155 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
       }
     </style>
   </head>

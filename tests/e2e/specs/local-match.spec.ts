@@ -17,7 +17,16 @@ test.describe("AIP Ultimate Fighter — Local Match Flow", () => {
     await expect(page.locator("text=STARTA STRID!")).toBeVisible();
 
     // Verify all 8 character profiles are visible
-    const names = ["Patchare", "Switch", "Helpdesk", "Sprint", "Kabel", "Rack", "Mesh", "Cloud"];
+    const names = [
+      "Capitan",
+      "Irstababben",
+      "Femboyfippe",
+      "Babas",
+      "Stinkfiend",
+      "Ekander",
+      "Goonström",
+      "Bulgarian Copper Thief",
+    ];
     for (const name of names) {
       await expect(page.locator(`text=${name}`).first()).toBeVisible();
     }
