@@ -97,8 +97,10 @@ export const App: React.FC = () => {
           container: canvasContainerRef.current,
           showBoxes: trainingSettings.showBoxes,
         });
+        (window as any).__RENDERER = rendererRef.current;
       }
     } else if (!is3dScreen && rendererRef.current) {
+      (window as any).__RENDERER = null;
       rendererRef.current.destroy();
       rendererRef.current = null;
     }

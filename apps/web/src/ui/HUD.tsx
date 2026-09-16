@@ -110,6 +110,7 @@ export const HUD: React.FC<HudProps> = ({
               />
               {/* Active Health Gauge */}
               <div
+                data-testid="p1-health-bar"
                 className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-400 via-amber-400 to-yellow-500 transition-all duration-75 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
                 style={{ width: `${p1HealthPercent}%` }}
               />
@@ -168,6 +169,7 @@ export const HUD: React.FC<HudProps> = ({
               />
               {/* Active Health Gauge */}
               <div
+                data-testid="p2-health-bar"
                 className="absolute inset-y-0 right-0 bg-gradient-to-l from-emerald-400 via-amber-400 to-yellow-500 transition-all duration-75 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
                 style={{ width: `${p2HealthPercent}%` }}
               />
@@ -223,7 +225,7 @@ export const HUD: React.FC<HudProps> = ({
 
       {/* Street Fighter Announcer Banner */}
       {bannerText && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div data-testid="announcer-banner" className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="transform scale-110 rounded-2xl border-4 border-yellow-500/90 bg-slate-950/95 px-16 py-8 shadow-[0_0_80px_rgba(234,179,8,0.6)] backdrop-blur-md">
             <h1 className="text-6xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-amber-400 to-yellow-500 drop-shadow-[0_4px_8px_rgba(0,0,0,0.9)]">
               {bannerText}

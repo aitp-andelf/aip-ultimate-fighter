@@ -9,6 +9,9 @@ export interface RendererOptions {
   showBoxes?: boolean;
 }
 
+// 200 simulation subunits = 1.0 meter in 3D world (Street Fighter arcade scale)
+export const WORLD_SCALE = 1 / 200;
+
 interface LoadedFighterState {
   group: THREE.Group;
   gltfRoot: THREE.Group | null;
@@ -100,10 +103,10 @@ export class GameRenderer {
     this.scene.background = new THREE.Color(0x060913);
     this.scene.fog = new THREE.FogExp2(0x060913, 0.015);
 
-    // Camera setup
+    // Camera setup (Street Fighter 2.5D perspective)
     const aspect = this.container.clientWidth / (this.container.clientHeight || 1);
-    this.camera = new THREE.PerspectiveCamera(42, aspect, 0.1, 1000);
-    this.camera.position.set(0, 1.8, 6.8);
+    this.camera = new THREE.PerspectiveCamera(40, aspect, 0.1, 1000);
+    this.camera.position.set(0, 1.4, 5.5);
 
     // Renderer setup with shadow maps
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
@@ -128,6 +131,13 @@ export class GameRenderer {
     this.stageKeyLight.shadow.camera.far = 25;
     this.stageKeyLight.shadow.bias = -0.001;
     this.scene.add(this.stageKeyLight);
+
+    // Arena Floor Spotlight for dramatic tournament illumination
+    const stageFloorSpot = new THREE.SpotLight(0xffffff, 2.8, 20, Math.PI / 3, 0.4, 1);
+    stageFloorSpot.position.set(0, 9, 4);
+    stageFloorSpot.target.position.set(0, 0, 0);
+    this.scene.add(stageFloorSpot);
+    this.scene.add(stageFloorSpot.target);
 
     // Groups
     this.particleGroup = new THREE.Group();
@@ -303,23 +313,50 @@ export class GameRenderer {
         }
       });
 
-      // Normalize model height to 1.85m to match fighting game pushbox/hurtbox
-      const box = new THREE.Box3().setFromObject(clonedScene);
-      const size = box.getSize(new THREE.Vector3());
-      const desiredHeight = 1.85;
-      const baseScale = desiredHeight / (size.y || 1);
+      // Accurately normalize model height to 2.05m heroic arcade scale
+      clonedScene.updateMatrixWorld(true);
+      let box = new THREE.Box3().setFromObject(clonedScene);
+      let size = box.getSize(new THREE.Vector3());
 
-      // Archetype minor scaling nuances
+      // If bounding box calculation from setFromObject was degenerate
+      if (size.y < 0.2 || size.y > 100) {
+        box = new THREE.Box3();
+        clonedScene.traverse((child: any) => {
+          if (child.isMesh && child.geometry) {
+            child.geometry.computeBoundingBox();
+            if (child.geometry.boundingBox) {
+              const meshBox = child.geometry.boundingBox.clone().applyMatrix4(child.matrixWorld);
+              box.union(meshBox);
+            }
+          }
+        });
+        size = box.getSize(new THREE.Vector3());
+      }
+
+      const desiredHeight = 2.05;
+      let baseScale = desiredHeight / (size.y || 1);
+      if (baseScale < 0.0005 || baseScale > 200) {
+        if (url.includes("Soldier")) baseScale = 0.0112;
+        else if (url.includes("RobotExpressive")) baseScale = 0.428;
+        else if (url.includes("Xbot")) baseScale = 1.135;
+        else if (url.includes("Michelle")) baseScale = 1.23;
+        else baseScale = 1.0;
+      }
+
       let archetypeScale = baseScale;
       if (fighter.archetype.startsWith("grappler")) {
-        archetypeScale *= 1.12; // Bulkier grappler silhouette
+        archetypeScale *= 1.15; // Capitan/Babas are bulkier grapplers
+      } else if (fighter.archetype.startsWith("zoner")) {
+        archetypeScale *= 0.95; // Femboyfippe/Stinkfiend are leaner
       }
 
       clonedScene.scale.set(archetypeScale, archetypeScale, archetypeScale);
+      clonedScene.rotation.y = Math.PI / 2; // Face towards opponent along X-axis
+      clonedScene.updateMatrixWorld(true);
 
-      // Align bottom of feet with ground (y = 0)
-      const feetY = box.min.y * archetypeScale;
-      clonedScene.position.y = -feetY;
+      // Align bottom of feet firmly with stage floor (y = 0)
+      const postBox = new THREE.Box3().setFromObject(clonedScene);
+      clonedScene.position.y = -postBox.min.y;
 
       // Setup AnimationMixer
       const mixer = new THREE.AnimationMixer(clonedScene);
@@ -397,21 +434,22 @@ export class GameRenderer {
       this.updateRimLights(0x8b5cf6, 0xeab308, 2.8, 2.0);
     }
 
-    // High-Resolution Stage Floor with reflections
-    const floorGeo = new THREE.PlaneGeometry(36, 12);
+    // High-Resolution Stage Floor with tournament markings and reflections
+    const floorGeo = new THREE.PlaneGeometry(32, 14);
+    const floorTex = this.createStageFloorTexture(stageId);
     const floorMat = new THREE.MeshStandardMaterial({
-      color: stageId === "fikarum" ? 0x27272a : stageId === "konferens" ? 0x09090b : 0x0f172a,
-      roughness: 0.25,
-      metalness: 0.65,
+      map: floorTex,
+      roughness: 0.3,
+      metalness: 0.35,
     });
     this.floorMesh = new THREE.Mesh(floorGeo, floorMat);
     this.floorMesh.rotation.x = -Math.PI / 2;
-    this.floorMesh.position.set(0, 0, 0);
+    this.floorMesh.position.set(0, 0, 1.0);
     this.floorMesh.receiveShadow = true;
     this.scene.add(this.floorMesh);
 
-    // Large Stage Backdrop Plane loading the cinematic AI image
-    const backGeo = new THREE.PlaneGeometry(34, 17);
+    // Stage Backdrop Plane loading the cinematic AI image
+    const backGeo = new THREE.PlaneGeometry(28, 14);
     const stageImageUrl = `/stages/${stageId}.jpg`;
 
     this.textureLoader.load(
@@ -427,7 +465,7 @@ export class GameRenderer {
 
         if (this.bgMeshBack) this.scene.remove(this.bgMeshBack);
         this.bgMeshBack = new THREE.Mesh(backGeo, backMat);
-        this.bgMeshBack.position.set(0, 6.0, -6.8);
+        this.bgMeshBack.position.set(0, 6.5, -5.5);
         this.scene.add(this.bgMeshBack);
       },
       undefined,
@@ -437,7 +475,7 @@ export class GameRenderer {
         const backMat = new THREE.MeshBasicMaterial({ map: canvasTex });
         if (this.bgMeshBack) this.scene.remove(this.bgMeshBack);
         this.bgMeshBack = new THREE.Mesh(backGeo, backMat);
-        this.bgMeshBack.position.set(0, 6.0, -6.8);
+        this.bgMeshBack.position.set(0, 6.5, -5.5);
         this.scene.add(this.bgMeshBack);
       }
     );
@@ -507,11 +545,11 @@ export class GameRenderer {
     const f0 = state.fighters[0];
     const f1 = state.fighters[1];
 
-    // Subunit to meter conversion (1000 subunits = 1 meter)
-    const pos0X = f0.x / 1000;
-    const pos0Y = f0.y / 1000;
-    const pos1X = f1.x / 1000;
-    const pos1Y = f1.y / 1000;
+    // Authoritative coordinate conversion: 200 simulation subunits = 1 meter
+    const pos0X = f0.x * WORLD_SCALE;
+    const pos0Y = f0.y * WORLD_SCALE;
+    const pos1X = f1.x * WORLD_SCALE;
+    const pos1Y = f1.y * WORLD_SCALE;
 
     this.fighter0.group.position.set(pos0X, pos0Y, 0);
     this.fighter0.group.scale.set(f0.facing, 1, 1);
@@ -529,16 +567,16 @@ export class GameRenderer {
     this.updateFighterAnimation(this.fighter0, f0, isFrozen ? 0 : dt);
     this.updateFighterAnimation(this.fighter1, f1, isFrozen ? 0 : dt);
 
-    // Camera follow midpoint with Street Fighter framing
+    // Camera follow midpoint with authentic Street Fighter framing
     const midX = (pos0X + pos1X) / 2;
     const dist = Math.abs(pos0X - pos1X);
-    const targetCamX = midX;
-    const targetCamZ = Math.max(5.2, Math.min(8.2, 4.8 + dist * 0.68));
-    const targetCamY = 1.7 + Math.max(pos0Y, pos1Y) * 0.25;
+    const targetCamX = Math.max(-2.5, Math.min(2.5, midX));
+    const targetCamZ = Math.max(4.2, Math.min(6.8, 3.6 + dist * 0.52));
+    const targetCamY = 1.35 + Math.max(pos0Y, pos1Y) * 0.35;
 
-    this.camera.position.x += (targetCamX - this.camera.position.x) * 0.12;
-    this.camera.position.z += (targetCamZ - this.camera.position.z) * 0.12;
-    this.camera.position.y += (targetCamY - this.camera.position.y) * 0.12;
+    this.camera.position.x += (targetCamX - this.camera.position.x) * 0.14;
+    this.camera.position.z += (targetCamZ - this.camera.position.z) * 0.14;
+    this.camera.position.y += (targetCamY - this.camera.position.y) * 0.14;
 
     // Apply Screen Shake
     if (this.screenShake > 0.001) {
@@ -549,11 +587,11 @@ export class GameRenderer {
       this.screenShake = 0;
     }
 
-    this.camera.lookAt(this.camera.position.x, 1.45, 0);
+    this.camera.lookAt(this.camera.position.x, 1.15 + Math.max(pos0Y, pos1Y) * 0.25, 0);
 
     // Subtle parallax shift for background backdrop
     if (this.bgMeshBack) {
-      this.bgMeshBack.position.x = this.camera.position.x * 0.12;
+      this.bgMeshBack.position.x = this.camera.position.x * 0.16;
     }
 
     // Render projectiles with signature character styling
@@ -561,18 +599,18 @@ export class GameRenderer {
 
     // Subtle full-meter aura sparks
     if (f0.meter >= 1000 && Math.random() < 0.35) {
-      this.spawnSparks(pos0X + (Math.random() - 0.5) * 0.35, pos0Y + 0.15, 0xf59e0b, 1, 0.05);
+      this.spawnSparks(pos0X + (Math.random() - 0.5) * 0.8, pos0Y + 0.5, 0xf59e0b, 1, 0.08);
     }
     if (f1.meter >= 1000 && Math.random() < 0.35) {
-      this.spawnSparks(pos1X + (Math.random() - 0.5) * 0.35, pos1Y + 0.15, 0xf59e0b, 1, 0.05);
+      this.spawnSparks(pos1X + (Math.random() - 0.5) * 0.8, pos1Y + 0.5, 0xf43f5e, 1, 0.08);
     }
 
     // Process simulation events (hits, blocks, supers, knockouts)
     for (const ev of state.events) {
       if (ev.kind === "hit") {
         const victim = ev.source === 0 ? f1 : f0;
-        const vx = victim.x / 1000;
-        const vy = victim.y / 1000 + 1.15;
+        const vx = victim.x * WORLD_SCALE;
+        const vy = victim.y * WORLD_SCALE + 1.15;
         this.spawnSparks(vx, vy, 0xffbb00, 18, 0.14);
         this.spawnSparks(vx, vy, 0xff4400, 10, 0.09);
         this.screenShake = Math.max(this.screenShake, 0.12);
@@ -580,8 +618,8 @@ export class GameRenderer {
         this.hitFreezeFrames = 3; // 3-frame hit stop punch
       } else if (ev.kind === "block") {
         const blocker = ev.source === 0 ? f0 : f1;
-        const bx = blocker.x / 1000;
-        const by = blocker.y / 1000 + 1.2;
+        const bx = blocker.x * WORLD_SCALE;
+        const by = blocker.y * WORLD_SCALE + 1.2;
         this.spawnSparks(bx, by, 0x38bdf8, 12, 0.1);
         this.spawnSparks(bx, by, 0xffffff, 6, 0.08);
         this.screenShake = Math.max(this.screenShake, 0.04);
@@ -589,8 +627,8 @@ export class GameRenderer {
         const user = ev.source === 0 ? f0 : f1;
         const char = state.chars[ev.source];
         const charId = char ? char.id : "shoto-a";
-        const ux = user.x / 1000;
-        const uy = user.y / 1000 + 1.0;
+        const ux = user.x * WORLD_SCALE;
+        const uy = user.y * WORLD_SCALE + 1.0;
 
         // Character-specific signature super burst
         if (charId === "grappler-a") {
@@ -777,6 +815,8 @@ export class GameRenderer {
     });
 
     const root = new THREE.Group();
+    root.scale.set(1.22, 1.22, 1.22); // Match 2.05m heroic arcade height
+    root.rotation.y = Math.PI / 2; // Face opponent along X-axis
     parent.add(root);
 
     // Torso
@@ -1159,8 +1199,10 @@ export class GameRenderer {
       const entry = this.projectilePool[i]!;
       if (i < projectiles.length) {
         const p = projectiles[i]!;
+        const px = p.x * WORLD_SCALE;
+        const py = p.y * WORLD_SCALE;
         entry.group.visible = true;
-        entry.group.position.set(p.x / 1000, p.y / 1000, 0.1);
+        entry.group.position.set(px, py, 0.1);
 
         const ownerChar = chars[p.owner];
         const charId = ownerChar ? ownerChar.id : "shoto-a";
@@ -1181,7 +1223,7 @@ export class GameRenderer {
           entry.ring.scale.set(1.4, 1.4, 1.4);
           entry.group.rotation.z += 0.25;
           if (p.life % 3 === 0) {
-            this.spawnSparks(p.x / 1000, p.y / 1000, 0xfbbf24, 2, 0.05);
+            this.spawnSparks(px, py, 0xfbbf24, 2, 0.05);
           }
         } else if (charId === "grappler-b") {
           // Babas: LASIK Laser Beam (horizontally stretched needle-thin laser)
@@ -1193,7 +1235,7 @@ export class GameRenderer {
           entry.aura.scale.set(3.4, 0.55, 0.55);
           entry.ring.scale.set(0.6, 0.6, 0.6);
           if (p.life % 2 === 0) {
-            this.spawnSparks(p.x / 1000, p.y / 1000, 0xe11d48, 2, 0.06);
+            this.spawnSparks(px, py, 0xe11d48, 2, 0.06);
           }
         } else if (charId === "zoner-a") {
           // Femboyfippe: Cardiac Grid Electric Node
@@ -1206,7 +1248,7 @@ export class GameRenderer {
           entry.ring.scale.set(1.8, 1.8, 1.8);
           entry.ring.rotation.y += 0.3;
           if (p.life % 3 === 0) {
-            this.spawnSparks(p.x / 1000, p.y / 1000, 0x22d3ee, 3, 0.08);
+            this.spawnSparks(px, py, 0x22d3ee, 3, 0.08);
           }
         } else if (charId === "zoner-b") {
           // Stinkfiend: Silent But Deadly Biohazard Poison Cloud
@@ -1218,7 +1260,7 @@ export class GameRenderer {
           entry.aura.scale.set(2.4, 2.4, 1.5);
           entry.ring.scale.set(1.6, 1.6, 1.6);
           if (p.life % 3 === 0) {
-            this.spawnSparks(p.x / 1000, p.y / 1000 + 0.1, 0x84cc16, 2, 0.03);
+            this.spawnSparks(px, py + 0.1, 0x84cc16, 2, 0.03);
           }
         } else if (charId === "shoto-b") {
           // Goonström: Goon Blast (Abyssal Dark Purple & Magenta Void)
@@ -1230,7 +1272,7 @@ export class GameRenderer {
           entry.aura.scale.set(1.8, 1.8, 1.8);
           entry.ring.scale.set(1.5, 1.5, 1.5);
           if (p.life % 3 === 0) {
-            this.spawnSparks(p.x / 1000, p.y / 1000, 0xd946ef, 3, 0.06);
+            this.spawnSparks(px, py, 0xd946ef, 3, 0.06);
           }
         } else if (charId === "hybrid-a") {
           // Ekander: Ekander Roll / Kinetic Mass
@@ -1243,7 +1285,7 @@ export class GameRenderer {
           entry.ring.scale.set(1.6, 1.6, 1.6);
           entry.group.rotation.z += p.facing * 0.3;
           if (p.life % 3 === 0) {
-            this.spawnSparks(p.x / 1000, p.y / 1000, 0xa855f7, 2, 0.05);
+            this.spawnSparks(px, py, 0xa855f7, 2, 0.05);
           }
         } else if (charId === "hybrid-b") {
           // Bulgarian Copper Thief: Copper Wire / Lightning Strike
@@ -1255,8 +1297,8 @@ export class GameRenderer {
           entry.aura.scale.set(1.8, 1.8, 1.8);
           entry.ring.scale.set(1.6, 1.6, 1.6);
           if (p.life % 3 === 0) {
-            this.spawnSparks(p.x / 1000, p.y / 1000, 0x14b8a6, 2, 0.07);
-            this.spawnSparks(p.x / 1000, p.y / 1000, 0xea580c, 1, 0.06);
+            this.spawnSparks(px, py, 0x14b8a6, 2, 0.07);
+            this.spawnSparks(px, py, 0xea580c, 1, 0.06);
           }
         } else {
           // Capitan: Blue Thunder Ground Shockwave
@@ -1268,7 +1310,7 @@ export class GameRenderer {
           entry.aura.scale.set(2.0, 2.0, 2.0);
           entry.ring.scale.set(2.0, 2.0, 2.0);
           if (p.life % 3 === 0) {
-            this.spawnSparks(p.x / 1000, p.y / 1000, 0x60a5fa, 3, 0.07);
+            this.spawnSparks(px, py, 0x60a5fa, 3, 0.07);
           }
         }
 
@@ -1373,19 +1415,19 @@ export class GameRenderer {
       const char = state.chars[i]!;
 
       // Pushbox (yellow)
-      const pw = char.pushbox.w / 1000;
-      const ph = char.pushbox.h / 1000;
-      const px = f.x / 1000;
-      const py = f.y / 1000 + ph / 2;
+      const pw = char.pushbox.w * WORLD_SCALE;
+      const ph = char.pushbox.h * WORLD_SCALE;
+      const px = f.x * WORLD_SCALE;
+      const py = f.y * WORLD_SCALE + ph / 2;
       this.drawBoxOutline(px, py, pw, ph, lineMatYellow);
 
       // Hurtboxes (green)
       const hurt = f.y > 0 ? char.hurtAir : f.state === "crouch" ? char.hurtCrouch : char.hurtStand;
       for (const b of hurt) {
-        const bw = b.w / 1000;
-        const bh = b.h / 1000;
-        const bx = f.x / 1000 + (f.facing === 1 ? b.x / 1000 + bw / 2 : -(b.x / 1000 + bw / 2));
-        const by = f.y / 1000 + b.y / 1000 + bh / 2;
+        const bw = b.w * WORLD_SCALE;
+        const bh = b.h * WORLD_SCALE;
+        const bx = f.x * WORLD_SCALE + (f.facing === 1 ? b.x * WORLD_SCALE + bw / 2 : -(b.x * WORLD_SCALE + bw / 2));
+        const by = f.y * WORLD_SCALE + b.y * WORLD_SCALE + bh / 2;
         this.drawBoxOutline(bx, by, bw, bh, lineMatGreen);
       }
 
@@ -1394,10 +1436,10 @@ export class GameRenderer {
         const move = char.moves[f.moveId];
         if (move) {
           for (const h of move.hitboxes) {
-            const hw = h.w / 1000;
-            const hh = h.h / 1000;
-            const hx = f.x / 1000 + (f.facing === 1 ? h.x / 1000 + hw / 2 : -(h.x / 1000 + hw / 2));
-            const hy = f.y / 1000 + h.y / 1000 + hh / 2;
+            const hw = h.w * WORLD_SCALE;
+            const hh = h.h * WORLD_SCALE;
+            const hx = f.x * WORLD_SCALE + (f.facing === 1 ? h.x * WORLD_SCALE + hw / 2 : -(h.x * WORLD_SCALE + hw / 2));
+            const hy = f.y * WORLD_SCALE + h.y * WORLD_SCALE + hh / 2;
             this.drawBoxOutline(hx, hy, hw, hh, lineMatRed);
           }
         }
@@ -1453,6 +1495,62 @@ export class GameRenderer {
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    return texture;
+  }
+
+  private createStageFloorTexture(stageId: string): THREE.CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1024;
+    canvas.height = 512;
+    const ctx = canvas.getContext("2d")!;
+
+    // Base tournament floor tone matching stage ambiance
+    ctx.fillStyle = stageId === "fikarum" ? "#292524" : stageId === "konferens" ? "#18181b" : "#0f172a";
+    ctx.fillRect(0, 0, 1024, 512);
+
+    // Subtle metallic grid
+    ctx.strokeStyle = stageId === "serverrum" ? "rgba(6, 182, 212, 0.22)" : "rgba(245, 158, 11, 0.20)";
+    ctx.lineWidth = 1.5;
+    for (let x = 0; x <= 1024; x += 64) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 512);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= 512; y += 64) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(1024, y);
+      ctx.stroke();
+    }
+
+    // Center Tournament Ring / Octagon
+    ctx.strokeStyle = stageId === "serverrum" ? "rgba(56, 189, 248, 0.6)" : "rgba(245, 158, 11, 0.6)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(512, 256, 130, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Center Emblem
+    ctx.fillStyle = stageId === "serverrum" ? "rgba(56, 189, 248, 0.85)" : "rgba(245, 158, 11, 0.85)";
+    ctx.font = "900 24px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("AROS IT-PARTNER", 512, 256);
+
+    // Left and Right stage boundaries
+    ctx.strokeStyle = "rgba(239, 68, 68, 0.75)";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(90, 0);
+    ctx.lineTo(90, 512);
+    ctx.moveTo(1024 - 90, 0);
+    ctx.lineTo(1024 - 90, 512);
+    ctx.stroke();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.ClampToEdgeWrapping;
     texture.wrapT = THREE.ClampToEdgeWrapping;
     return texture;
   }
