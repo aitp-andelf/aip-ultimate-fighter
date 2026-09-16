@@ -30,6 +30,7 @@ export const GRAPPLER_A: CharacterDef = {
   hurtAir: DEFAULT_HURT_AIR,
   colors: ["#b91c1c", "#f87171"],
   animationProfileId: "grappler-a",
+  modelUrl: "/models/Soldier.glb",
   normals: {
     lp: "lp",
     hp: "hp",

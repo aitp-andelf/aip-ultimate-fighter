@@ -7,6 +7,7 @@ import type {
   RoomStatePayload,
   SlotId,
   SnapshotPayload,
+  StageDef,
 } from "@aipuf/contracts";
 import type { MatchState, TrainingSettings } from "@aipuf/sim";
 import { sound } from "./audio/sound.ts";
@@ -108,10 +109,12 @@ export const App: React.FC = () => {
     c1: CharacterDef,
     c2: CharacterDef,
     p1Pal: 0 | 1,
-    p2Pal: 0 | 1
+    p2Pal: 0 | 1,
+    stage?: StageDef
   ) => {
     setP1Char(c1);
     setP2Char(c2);
+    const chosenStage = stage || STAGE_SERVERRUM;
 
     const nextScreen = pendingMode === "training" ? "training" : "local_match";
     setScreen(nextScreen);
@@ -124,7 +127,7 @@ export const App: React.FC = () => {
           inputRef.current,
           c1,
           c2,
-          STAGE_SERVERRUM,
+          chosenStage,
           {
             isTraining: pendingMode === "training",
             isCpuMatch: pendingMode === "cpu",

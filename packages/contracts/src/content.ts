@@ -136,6 +136,7 @@ export interface CharacterDef {
   };
   animationProfileId: string;
   colors: [string, string];
+  modelUrl?: string;
 }
 
 export interface StageLayer {

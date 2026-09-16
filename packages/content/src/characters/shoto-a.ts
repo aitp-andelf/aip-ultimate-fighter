@@ -27,6 +27,7 @@ export const SHOTO_A: CharacterDef = {
   hurtAir: DEFAULT_HURT_AIR,
   colors: ["#16a34a", "#4ade80"],
   animationProfileId: "shoto-a",
+  modelUrl: "/models/RobotExpressive.glb",
   normals: {
     lp: "lp",
     hp: "hp",

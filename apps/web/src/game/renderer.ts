@@ -1,5 +1,7 @@
 import * as THREE from "three";
-import type { CharacterDef, StageDef } from "@aipuf/contracts";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
+import type { CharacterDef } from "@aipuf/contracts";
 import type { FighterRuntime, MatchState, ProjectileRuntime } from "@aipuf/sim";
 
 export interface RendererOptions {
@@ -7,78 +9,123 @@ export interface RendererOptions {
   showBoxes?: boolean;
 }
 
+interface LoadedFighterState {
+  group: THREE.Group;
+  gltfRoot: THREE.Group | null;
+  proceduralParts: FighterBodyParts | null;
+  mixer: THREE.AnimationMixer | null;
+  actions: Record<string, THREE.AnimationAction>;
+  currentAction: THREE.AnimationAction | null;
+  currentState: string;
+  isGltfLoaded: boolean;
+  archetype: string;
+  primaryColor: string;
+  secondaryColor: string;
+}
+
+interface SparkParticle {
+  mesh: THREE.Mesh;
+  life: number;
+  maxLife: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  rotSpeed: number;
+}
+
+interface AmbientParticle {
+  mesh: THREE.Mesh;
+  baseY: number;
+  baseX: number;
+  speed: number;
+  phase: number;
+}
+
+// Global cache for loaded GLTF scenes to avoid re-downloading
+const gltfCache = new Map<string, { scene: THREE.Group; animations: THREE.AnimationClip[] }>();
+const gltfLoadingPromises = new Map<string, Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] }>>();
+
 export class GameRenderer {
   private container: HTMLDivElement;
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
   private animFrameId: number | null = null;
+  private clock = new THREE.Clock();
 
-  // Background layers
+  // Background & Stage
   private bgMeshBack: THREE.Mesh | null = null;
-  private bgMeshMid: THREE.Mesh | null = null;
   private floorMesh: THREE.Mesh | null = null;
+  private stageRimLight1: THREE.PointLight | null = null;
+  private stageRimLight2: THREE.PointLight | null = null;
+  private stageKeyLight: THREE.DirectionalLight | null = null;
+  private stageAmbientLight: THREE.AmbientLight | null = null;
+  private ambientParticles: AmbientParticle[] = [];
+  private particleGroup: THREE.Group;
 
-  // Fighter models
-  private fighter0Group: THREE.Group;
-  private fighter1Group: THREE.Group;
-  private f0Parts: FighterBodyParts;
-  private f1Parts: FighterBodyParts;
+  // Fighters
+  private fighter0: LoadedFighterState;
+  private fighter1: LoadedFighterState;
 
-  // Projectile meshes
-  private projectilePool: THREE.Mesh[] = [];
+  // Projectiles
+  private projectilePool: Array<{ core: THREE.Mesh; aura: THREE.Mesh; group: THREE.Group }> = [];
 
   // VFX
   private sparkGroup: THREE.Group;
-  private sparks: Array<{ mesh: THREE.Mesh; life: number; maxLife: number; vx: number; vy: number }> = [];
+  private sparks: SparkParticle[] = [];
+  private screenShake = 0;
+  private hitFreezeFrames = 0;
+  private impactFlashMesh: THREE.Mesh | null = null;
+  private impactFlashOpacity = 0;
 
-  // Debug box helpers
+  // Debug Box Overlays
   private debugBoxGroup: THREE.Group;
   public showBoxes = false;
 
   private currentStageId = "";
+  private textureLoader = new THREE.TextureLoader();
 
   constructor(options: RendererOptions) {
     this.container = options.container;
     this.showBoxes = options.showBoxes ?? false;
 
-    // Scene
+    // Scene setup
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0a0e17);
+    this.scene.background = new THREE.Color(0x060913);
+    this.scene.fog = new THREE.FogExp2(0x060913, 0.015);
 
-    // Camera
+    // Camera setup
     const aspect = this.container.clientWidth / (this.container.clientHeight || 1);
-    this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 2000);
-    this.camera.position.set(0, 1.8, 6.5);
+    this.camera = new THREE.PerspectiveCamera(42, aspect, 0.1, 1000);
+    this.camera.position.set(0, 1.8, 6.8);
 
-    // Renderer
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    // Renderer setup with shadow maps
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.15;
     this.container.appendChild(this.renderer.domElement);
 
-    // Lighting
-    const ambient = new THREE.AmbientLight(0xffffff, 1.2);
-    this.scene.add(ambient);
+    // Base Lighting
+    this.stageAmbientLight = new THREE.AmbientLight(0xffffff, 1.1);
+    this.scene.add(this.stageAmbientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
-    dirLight.position.set(3, 8, 6);
-    dirLight.castShadow = true;
-    this.scene.add(dirLight);
-
-    const fillLight = new THREE.DirectionalLight(0x60a5fa, 0.8);
-    fillLight.position.set(-4, 3, -2);
-    this.scene.add(fillLight);
+    this.stageKeyLight = new THREE.DirectionalLight(0xffffff, 2.4);
+    this.stageKeyLight.position.set(3, 9, 6);
+    this.stageKeyLight.castShadow = true;
+    this.stageKeyLight.shadow.mapSize.width = 1024;
+    this.stageKeyLight.shadow.mapSize.height = 1024;
+    this.stageKeyLight.shadow.camera.near = 0.5;
+    this.stageKeyLight.shadow.camera.far = 25;
+    this.stageKeyLight.shadow.bias = -0.001;
+    this.scene.add(this.stageKeyLight);
 
     // Groups
-    this.fighter0Group = new THREE.Group();
-    this.fighter1Group = new THREE.Group();
-    this.scene.add(this.fighter0Group);
-    this.scene.add(this.fighter1Group);
-
-    this.f0Parts = this.buildFighterModel(this.fighter0Group, "#2563eb", "#60a5fa");
-    this.f1Parts = this.buildFighterModel(this.fighter1Group, "#dc2626", "#f87171");
+    this.particleGroup = new THREE.Group();
+    this.scene.add(this.particleGroup);
 
     this.sparkGroup = new THREE.Group();
     this.scene.add(this.sparkGroup);
@@ -86,32 +133,270 @@ export class GameRenderer {
     this.debugBoxGroup = new THREE.Group();
     this.scene.add(this.debugBoxGroup);
 
+    // Fighter roots
+    const f0Group = new THREE.Group();
+    const f1Group = new THREE.Group();
+    this.scene.add(f0Group);
+    this.scene.add(f1Group);
+
+    this.fighter0 = {
+      group: f0Group,
+      gltfRoot: null,
+      proceduralParts: null,
+      mixer: null,
+      actions: {},
+      currentAction: null,
+      currentState: "",
+      isGltfLoaded: false,
+      archetype: "shoto-a",
+      primaryColor: "#2563eb",
+      secondaryColor: "#60a5fa",
+    };
+
+    this.fighter1 = {
+      group: f1Group,
+      gltfRoot: null,
+      proceduralParts: null,
+      mixer: null,
+      actions: {},
+      currentAction: null,
+      currentState: "",
+      isGltfLoaded: false,
+      archetype: "zoner-a",
+      primaryColor: "#dc2626",
+      secondaryColor: "#f87171",
+    };
+
+    // Build procedural models immediately as zero-latency fallback
+    this.fighter0.proceduralParts = this.buildProceduralFighter(this.fighter0.group, this.fighter0.primaryColor, this.fighter0.secondaryColor);
+    this.fighter1.proceduralParts = this.buildProceduralFighter(this.fighter1.group, this.fighter1.primaryColor, this.fighter1.secondaryColor);
+
+    // Impact Flash Overlay
+    const flashGeo = new THREE.PlaneGeometry(30, 20);
+    const flashMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0,
+      depthTest: false,
+    });
+    this.impactFlashMesh = new THREE.Mesh(flashGeo, flashMat);
+    this.impactFlashMesh.position.set(0, 2, 2);
+    this.impactFlashMesh.renderOrder = 999;
+    this.scene.add(this.impactFlashMesh);
+
+    // Initialize Stage
     this.setupStage("serverrum");
+    this.initAmbientParticles();
+
+    // Trigger async loading of 3D rigged GLTF models
+    this.loadRiggedFighter(0, "/models/RobotExpressive.glb");
+    this.loadRiggedFighter(1, "/models/RobotExpressive.glb");
 
     window.addEventListener("resize", this.onWindowResize);
   }
 
+  // --- Fighter Model Setup & Async GLTF Loader ---
+
   public setupFighterModels(char0: CharacterDef, char1: CharacterDef): void {
-    this.fighter0Group.clear();
-    this.fighter1Group.clear();
-    this.f0Parts = this.buildFighterModel(this.fighter0Group, char0.colors[0], char0.colors[1], char0.archetype);
-    this.f1Parts = this.buildFighterModel(this.fighter1Group, char1.colors[0], char1.colors[1], char1.archetype);
+    this.fighter0.archetype = char0.archetype;
+    this.fighter0.primaryColor = char0.colors[0];
+    this.fighter0.secondaryColor = char0.colors[1];
+
+    this.fighter1.archetype = char1.archetype;
+    this.fighter1.primaryColor = char1.colors[0];
+    this.fighter1.secondaryColor = char1.colors[1];
+
+    // Rebuild procedural fallback with character colors
+    if (this.fighter0.proceduralParts) {
+      this.fighter0.group.remove(this.fighter0.proceduralParts.root);
+    }
+    this.fighter0.proceduralParts = this.buildProceduralFighter(
+      this.fighter0.group,
+      char0.colors[0],
+      char0.colors[1],
+      char0.archetype
+    );
+
+    if (this.fighter1.proceduralParts) {
+      this.fighter1.group.remove(this.fighter1.proceduralParts.root);
+    }
+    this.fighter1.proceduralParts = this.buildProceduralFighter(
+      this.fighter1.group,
+      char1.colors[0],
+      char1.colors[1],
+      char1.archetype
+    );
+
+    // Determine 3D model: use character custom model if available, else RobotExpressive or Xbot
+    const model0 = char0.modelUrl || "/models/RobotExpressive.glb";
+    const model1 = char1.modelUrl || "/models/RobotExpressive.glb";
+
+    this.loadRiggedFighter(0, model0);
+    this.loadRiggedFighter(1, model1);
   }
 
+  private async loadRiggedFighter(slot: 0 | 1, url: string): Promise<void> {
+    const fighter = slot === 0 ? this.fighter0 : this.fighter1;
+
+    try {
+      let cached = gltfCache.get(url);
+      if (!cached) {
+        let loadPromise = gltfLoadingPromises.get(url);
+        if (!loadPromise) {
+          const loader = new GLTFLoader();
+          loadPromise = new Promise((resolve, reject) => {
+            loader.load(
+              url,
+              (gltf) => {
+                const data = { scene: gltf.scene, animations: gltf.animations };
+                gltfCache.set(url, data);
+                resolve(data);
+              },
+              undefined,
+              (err) => reject(err)
+            );
+          });
+          gltfLoadingPromises.set(url, loadPromise);
+        }
+        cached = await loadPromise;
+      }
+
+      // Clone scene with independent skeletal rig
+      const clonedScene = SkeletonUtils.clone(cached.scene) as THREE.Group;
+
+      // Customize materials with fighter colors
+      const primaryCol = new THREE.Color(fighter.primaryColor);
+      const secondaryCol = new THREE.Color(fighter.secondaryColor);
+
+      clonedScene.traverse((child: any) => {
+        if (child.isMesh && child.material) {
+          if (Array.isArray(child.material)) {
+            child.material = child.material.map((m: any) => m.clone());
+          } else {
+            child.material = child.material.clone();
+          }
+
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          for (const mat of mats) {
+            mat.roughness = 0.35;
+            mat.metalness = 0.35;
+            const matName = (mat.name || "").toLowerCase();
+
+            if (matName.includes("main") || matName.includes("highlimbs") || !matName) {
+              mat.color = primaryCol;
+              mat.emissive = primaryCol.clone().multiplyScalar(0.15);
+            } else if (matName.includes("grey") || matName.includes("joints")) {
+              mat.color = secondaryCol;
+              mat.emissive = secondaryCol.clone().multiplyScalar(0.1);
+            } else if (matName.includes("black")) {
+              mat.color = new THREE.Color(0x1e293b);
+            }
+          }
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      // Normalize model height to 1.85m to match fighting game pushbox/hurtbox
+      const box = new THREE.Box3().setFromObject(clonedScene);
+      const size = box.getSize(new THREE.Vector3());
+      const desiredHeight = 1.85;
+      const baseScale = desiredHeight / (size.y || 1);
+
+      // Archetype minor scaling nuances
+      let archetypeScale = baseScale;
+      if (fighter.archetype.startsWith("grappler")) {
+        archetypeScale *= 1.12; // Bulkier grappler silhouette
+      }
+
+      clonedScene.scale.set(archetypeScale, archetypeScale, archetypeScale);
+
+      // Align bottom of feet with ground (y = 0)
+      const feetY = box.min.y * archetypeScale;
+      clonedScene.position.y = -feetY;
+
+      // Setup AnimationMixer
+      const mixer = new THREE.AnimationMixer(clonedScene);
+      const actions: Record<string, THREE.AnimationAction> = {};
+      for (const clip of cached.animations) {
+        actions[clip.name.toLowerCase()] = mixer.clipAction(clip);
+      }
+
+      // Remove existing gltf root if any
+      if (fighter.gltfRoot) {
+        fighter.group.remove(fighter.gltfRoot);
+      }
+
+      fighter.gltfRoot = clonedScene;
+      fighter.mixer = mixer;
+      fighter.actions = actions;
+      fighter.isGltfLoaded = true;
+      fighter.group.add(clonedScene);
+
+      // Hide procedural parts once real 3D rigged model is ready
+      if (fighter.proceduralParts) {
+        fighter.proceduralParts.root.visible = false;
+      }
+    } catch {
+      // In offline / fallback environment, procedural model stays active seamlessly
+      fighter.isGltfLoaded = false;
+      if (fighter.proceduralParts) {
+        fighter.proceduralParts.root.visible = true;
+      }
+    }
+  }
+
+  // --- Dynamic Stage Setup ---
+
   public setupStage(stageId: string): void {
-    if (this.currentStageId === stageId) return;
+    if (this.currentStageId === stageId && this.bgMeshBack) return;
     this.currentStageId = stageId;
 
     if (this.bgMeshBack) this.scene.remove(this.bgMeshBack);
-    if (this.bgMeshMid) this.scene.remove(this.bgMeshMid);
     if (this.floorMesh) this.scene.remove(this.floorMesh);
 
-    // Floor
-    const floorGeo = new THREE.PlaneGeometry(24, 8);
+    // Configure stage-specific atmospheric lighting & fog
+    if (stageId === "serverrum") {
+      this.scene.fog = new THREE.FogExp2(0x040814, 0.018);
+      if (this.stageAmbientLight) this.stageAmbientLight.color.setHex(0x94a3b8);
+      if (this.stageKeyLight) {
+        this.stageKeyLight.color.setHex(0xe0f2fe);
+        this.stageKeyLight.intensity = 2.5;
+      }
+      this.updateRimLights(0x06b6d4, 0x10b981, 2.5, 2.0);
+    } else if (stageId === "fikarum") {
+      this.scene.fog = new THREE.FogExp2(0x1a120c, 0.015);
+      if (this.stageAmbientLight) this.stageAmbientLight.color.setHex(0xfde68a);
+      if (this.stageKeyLight) {
+        this.stageKeyLight.color.setHex(0xffedd5);
+        this.stageKeyLight.intensity = 2.6;
+      }
+      this.updateRimLights(0xf59e0b, 0xd97706, 2.2, 1.8);
+    } else if (stageId === "kontor") {
+      this.scene.fog = new THREE.FogExp2(0x041122, 0.016);
+      if (this.stageAmbientLight) this.stageAmbientLight.color.setHex(0xa5f3fc);
+      if (this.stageKeyLight) {
+        this.stageKeyLight.color.setHex(0xffffff);
+        this.stageKeyLight.intensity = 2.4;
+      }
+      this.updateRimLights(0x0ea5e9, 0xf97316, 2.8, 2.2);
+    } else {
+      // Konferens
+      this.scene.fog = new THREE.FogExp2(0x0c071e, 0.016);
+      if (this.stageAmbientLight) this.stageAmbientLight.color.setHex(0xc4b5fd);
+      if (this.stageKeyLight) {
+        this.stageKeyLight.color.setHex(0xffffff);
+        this.stageKeyLight.intensity = 2.5;
+      }
+      this.updateRimLights(0x8b5cf6, 0xeab308, 2.8, 2.0);
+    }
+
+    // High-Resolution Stage Floor with reflections
+    const floorGeo = new THREE.PlaneGeometry(36, 12);
     const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x1e293b,
-      roughness: 0.8,
-      metalness: 0.2,
+      color: stageId === "fikarum" ? 0x27272a : stageId === "konferens" ? 0x09090b : 0x0f172a,
+      roughness: 0.25,
+      metalness: 0.65,
     });
     this.floorMesh = new THREE.Mesh(floorGeo, floorMat);
     this.floorMesh.rotation.x = -Math.PI / 2;
@@ -119,87 +404,194 @@ export class GameRenderer {
     this.floorMesh.receiveShadow = true;
     this.scene.add(this.floorMesh);
 
-    // Mid parallax background
-    const midGeo = new THREE.PlaneGeometry(28, 10);
-    const midTexture = this.createStageTexture(stageId, "mid");
-    const midMat = new THREE.MeshBasicMaterial({
-      map: midTexture,
-      transparent: true,
-      opacity: 0.9,
-    });
-    this.bgMeshMid = new THREE.Mesh(midGeo, midMat);
-    this.bgMeshMid.position.set(0, 3.5, -3.5);
-    this.scene.add(this.bgMeshMid);
+    // Large Stage Backdrop Plane loading the cinematic AI image
+    const backGeo = new THREE.PlaneGeometry(34, 17);
+    const stageImageUrl = `/stages/${stageId}.jpg`;
 
-    // Back parallax background
-    const backGeo = new THREE.PlaneGeometry(36, 12);
-    const backTexture = this.createStageTexture(stageId, "back");
-    const backMat = new THREE.MeshBasicMaterial({
-      map: backTexture,
-    });
-    this.bgMeshBack = new THREE.Mesh(backGeo, backMat);
-    this.bgMeshBack.position.set(0, 4.5, -6.5);
-    this.scene.add(this.bgMeshBack);
+    this.textureLoader.load(
+      stageImageUrl,
+      (texture) => {
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.generateMipmaps = true;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+
+        const backMat = new THREE.MeshBasicMaterial({
+          map: texture,
+        });
+
+        if (this.bgMeshBack) this.scene.remove(this.bgMeshBack);
+        this.bgMeshBack = new THREE.Mesh(backGeo, backMat);
+        this.bgMeshBack.position.set(0, 6.0, -6.8);
+        this.scene.add(this.bgMeshBack);
+      },
+      undefined,
+      () => {
+        // Fallback procedural canvas texture if image not accessible
+        const canvasTex = this.createFallbackStageTexture(stageId);
+        const backMat = new THREE.MeshBasicMaterial({ map: canvasTex });
+        if (this.bgMeshBack) this.scene.remove(this.bgMeshBack);
+        this.bgMeshBack = new THREE.Mesh(backGeo, backMat);
+        this.bgMeshBack.position.set(0, 6.0, -6.8);
+        this.scene.add(this.bgMeshBack);
+      }
+    );
   }
 
+  private updateRimLights(color1: number, color2: number, int1: number, int2: number): void {
+    if (!this.stageRimLight1) {
+      this.stageRimLight1 = new THREE.PointLight(color1, int1, 15);
+      this.stageRimLight1.position.set(-5, 3, 2);
+      this.scene.add(this.stageRimLight1);
+    } else {
+      this.stageRimLight1.color.setHex(color1);
+      this.stageRimLight1.intensity = int1;
+    }
+
+    if (!this.stageRimLight2) {
+      this.stageRimLight2 = new THREE.PointLight(color2, int2, 15);
+      this.stageRimLight2.position.set(5, 3, 2);
+      this.scene.add(this.stageRimLight2);
+    } else {
+      this.stageRimLight2.color.setHex(color2);
+      this.stageRimLight2.intensity = int2;
+    }
+  }
+
+  // --- Ambient Atmospheric Particles ---
+
+  private initAmbientParticles(): void {
+    const pGeo = new THREE.SphereGeometry(0.025, 6, 6);
+    const pMat = new THREE.MeshBasicMaterial({
+      color: 0x93c5fd,
+      transparent: true,
+      opacity: 0.6,
+    });
+
+    for (let i = 0; i < 45; i++) {
+      const mesh = new THREE.Mesh(pGeo, pMat);
+      const baseX = (Math.random() - 0.5) * 24;
+      const baseY = 0.5 + Math.random() * 4.5;
+      const baseZ = (Math.random() - 0.5) * 6;
+
+      mesh.position.set(baseX, baseY, baseZ);
+      this.particleGroup.add(mesh);
+
+      this.ambientParticles.push({
+        mesh,
+        baseX,
+        baseY,
+        speed: 0.005 + Math.random() * 0.01,
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+  }
+
+  private updateAmbientParticles(): void {
+    const t = performance.now() * 0.001;
+    for (const p of this.ambientParticles) {
+      p.mesh.position.y = p.baseY + Math.sin(t * 1.2 + p.phase) * 0.4;
+      p.mesh.position.x = p.baseX + Math.cos(t * 0.8 + p.phase) * 0.3;
+    }
+  }
+
+  // --- Main Render Loop (called per animation frame or simulation tick) ---
+
   public renderMatch(state: MatchState): void {
+    const dt = this.clock.getDelta();
     const f0 = state.fighters[0];
     const f1 = state.fighters[1];
 
-    // Subunit to world meter conversion: 1000 subunits = 1 meter
+    // Subunit to meter conversion (1000 subunits = 1 meter)
     const pos0X = f0.x / 1000;
     const pos0Y = f0.y / 1000;
     const pos1X = f1.x / 1000;
     const pos1Y = f1.y / 1000;
 
-    this.fighter0Group.position.set(pos0X, pos0Y, 0);
-    this.fighter0Group.scale.set(f0.facing, 1, 1);
+    this.fighter0.group.position.set(pos0X, pos0Y, 0);
+    this.fighter0.group.scale.set(f0.facing, 1, 1);
 
-    this.fighter1Group.position.set(pos1X, pos1Y, 0);
-    this.fighter1Group.scale.set(f1.facing, 1, 1);
+    this.fighter1.group.position.set(pos1X, pos1Y, 0);
+    this.fighter1.group.scale.set(f1.facing, 1, 1);
 
-    // Animate body parts
-    this.poseFighter(this.f0Parts, f0);
-    this.poseFighter(this.f1Parts, f1);
+    // Hit-stop freeze frame check
+    const isFrozen = this.hitFreezeFrames > 0;
+    if (this.hitFreezeFrames > 0) {
+      this.hitFreezeFrames--;
+    }
 
-    // Camera follow midpoint
+    // Animate fighters
+    this.updateFighterAnimation(this.fighter0, f0, isFrozen ? 0 : dt);
+    this.updateFighterAnimation(this.fighter1, f1, isFrozen ? 0 : dt);
+
+    // Camera follow midpoint with Street Fighter framing
     const midX = (pos0X + pos1X) / 2;
     const dist = Math.abs(pos0X - pos1X);
     const targetCamX = midX;
-    const targetCamZ = Math.max(5.5, Math.min(8.5, 5.0 + dist * 0.7));
+    const targetCamZ = Math.max(5.2, Math.min(8.2, 4.8 + dist * 0.68));
+    const targetCamY = 1.7 + Math.max(pos0Y, pos1Y) * 0.25;
 
-    this.camera.position.x += (targetCamX - this.camera.position.x) * 0.1;
-    this.camera.position.z += (targetCamZ - this.camera.position.z) * 0.1;
-    this.camera.lookAt(this.camera.position.x, 1.4, 0);
+    this.camera.position.x += (targetCamX - this.camera.position.x) * 0.12;
+    this.camera.position.z += (targetCamZ - this.camera.position.z) * 0.12;
+    this.camera.position.y += (targetCamY - this.camera.position.y) * 0.12;
 
-    // Parallax shift for backgrounds
-    if (this.bgMeshMid) {
-      this.bgMeshMid.position.x = this.camera.position.x * 0.4;
+    // Apply Screen Shake
+    if (this.screenShake > 0.001) {
+      this.camera.position.x += (Math.random() - 0.5) * this.screenShake;
+      this.camera.position.y += (Math.random() - 0.5) * this.screenShake;
+      this.screenShake *= 0.85;
+    } else {
+      this.screenShake = 0;
     }
+
+    this.camera.lookAt(this.camera.position.x, 1.45, 0);
+
+    // Subtle parallax shift for background backdrop
     if (this.bgMeshBack) {
-      this.bgMeshBack.position.x = this.camera.position.x * 0.15;
+      this.bgMeshBack.position.x = this.camera.position.x * 0.12;
     }
 
     // Render projectiles
     this.renderProjectiles(state.projectiles);
 
-    // Render event VFX (hits, sparks, blocks)
+    // Process simulation events (hits, blocks, supers, knockouts)
     for (const ev of state.events) {
       if (ev.kind === "hit") {
         const victim = ev.source === 0 ? f1 : f0;
-        this.spawnSparks(victim.x / 1000, victim.y / 1000 + 1.2, 0xffe600, 12);
+        const vx = victim.x / 1000;
+        const vy = victim.y / 1000 + 1.15;
+        this.spawnSparks(vx, vy, 0xffbb00, 18, 0.14);
+        this.spawnSparks(vx, vy, 0xff4400, 10, 0.09);
+        this.screenShake = Math.max(this.screenShake, 0.12);
+        this.triggerImpactFlash(0.25);
+        this.hitFreezeFrames = 3; // 3-frame hit stop punch
       } else if (ev.kind === "block") {
         const blocker = ev.source === 0 ? f0 : f1;
-        this.spawnSparks(blocker.x / 1000, blocker.y / 1000 + 1.2, 0x38bdf8, 8);
+        const bx = blocker.x / 1000;
+        const by = blocker.y / 1000 + 1.2;
+        this.spawnSparks(bx, by, 0x38bdf8, 12, 0.1);
+        this.spawnSparks(bx, by, 0xffffff, 6, 0.08);
+        this.screenShake = Math.max(this.screenShake, 0.04);
       } else if (ev.kind === "super") {
         const user = ev.source === 0 ? f0 : f1;
-        this.spawnSparks(user.x / 1000, user.y / 1000 + 1.0, 0xa855f7, 24);
+        const ux = user.x / 1000;
+        const uy = user.y / 1000 + 1.0;
+        this.spawnSparks(ux, uy, 0xa855f7, 32, 0.22);
+        this.spawnSparks(ux, uy, 0xec4899, 20, 0.16);
+        this.screenShake = Math.max(this.screenShake, 0.35);
+        this.triggerImpactFlash(0.65);
+        this.hitFreezeFrames = 6;
+      } else if (ev.kind === "ko") {
+        this.screenShake = Math.max(this.screenShake, 0.45);
+        this.triggerImpactFlash(0.5);
       }
     }
 
+    // Update VFX & Particles
     this.updateSparks();
+    this.updateAmbientParticles();
+    this.updateImpactFlash();
 
-    // Render debug boxes if enabled
+    // Render debug boxes if toggled
     if (this.showBoxes) {
       this.renderDebugBoxes(state);
     } else {
@@ -209,9 +601,97 @@ export class GameRenderer {
     this.renderer.render(this.scene, this.camera);
   }
 
-  // --- Fighter 3D Rig & Pose ---
+  // --- Fighter Animation Driving ---
 
-  private buildFighterModel(
+  private updateFighterAnimation(fighter: LoadedFighterState, runtime: FighterRuntime, dt: number): void {
+    if (fighter.isGltfLoaded && fighter.mixer) {
+      // Drive skeletal animation mixer
+      fighter.mixer.update(dt);
+      this.playRiggedAnimation(fighter, runtime.state);
+    } else if (fighter.proceduralParts) {
+      // Fallback: drive procedural skeleton
+      this.poseProceduralFighter(fighter.proceduralParts, runtime);
+    }
+  }
+
+  private playRiggedAnimation(fighter: LoadedFighterState, state: string): void {
+    if (fighter.currentState === state) return;
+    fighter.currentState = state;
+
+    const findAction = (...names: string[]) => {
+      for (const name of names) {
+        const act = fighter.actions[name.toLowerCase()];
+        if (act) return act;
+      }
+      return null;
+    };
+
+    let targetAction: THREE.AnimationAction | null = null;
+    let timeScale = 1.0;
+
+    switch (state) {
+      case "idle":
+        targetAction = findAction("idle", "standing");
+        break;
+      case "walkForward":
+        targetAction = findAction("walking", "walk", "running");
+        break;
+      case "walkBackward":
+        targetAction = findAction("walking", "walk");
+        timeScale = -0.75;
+        break;
+      case "dash":
+        targetAction = findAction("running", "run", "walking");
+        timeScale = 1.3;
+        break;
+      case "crouch":
+      case "crouchBlock":
+        targetAction = findAction("sitting", "sneak_pose", "idle");
+        break;
+      case "jump":
+      case "fall":
+        targetAction = findAction("jump", "walkjump");
+        break;
+      case "standBlock":
+        targetAction = findAction("no", "headshake", "idle");
+        break;
+      case "attackStartup":
+      case "attackActive":
+      case "attackRecovery":
+        targetAction = findAction("punch", "agree", "running");
+        timeScale = 1.4;
+        break;
+      case "hitstun":
+        targetAction = findAction("no", "headshake");
+        timeScale = 1.5;
+        break;
+      case "knockdown":
+      case "ko":
+        targetAction = findAction("death", "sad_pose");
+        if (targetAction) {
+          targetAction.clampWhenFinished = true;
+          targetAction.loop = THREE.LoopOnce;
+        }
+        break;
+      case "victory":
+        targetAction = findAction("dance", "thumbsup", "wave", "agree");
+        break;
+      default:
+        targetAction = findAction("idle");
+    }
+
+    if (targetAction && targetAction !== fighter.currentAction) {
+      if (fighter.currentAction) {
+        fighter.currentAction.fadeOut(0.08);
+      }
+      targetAction.reset().setEffectiveTimeScale(timeScale).fadeIn(0.08).play();
+      fighter.currentAction = targetAction;
+    }
+  }
+
+  // --- Procedural Fallback Rig ---
+
+  private buildProceduralFighter(
     parent: THREE.Group,
     primaryColor: string,
     secondaryColor: string,
@@ -219,12 +699,12 @@ export class GameRenderer {
   ): FighterBodyParts {
     const pMat = new THREE.MeshStandardMaterial({
       color: primaryColor,
-      roughness: 0.4,
+      roughness: 0.35,
       metalness: 0.3,
     });
     const sMat = new THREE.MeshStandardMaterial({
       color: secondaryColor,
-      roughness: 0.5,
+      roughness: 0.45,
       metalness: 0.2,
     });
     const jointMat = new THREE.MeshStandardMaterial({
@@ -239,12 +719,15 @@ export class GameRenderer {
     const torsoGeo = new THREE.BoxGeometry(0.38, 0.48, 0.24);
     const torso = new THREE.Mesh(torsoGeo, pMat);
     torso.position.set(0, 1.15, 0);
+    torso.castShadow = true;
+    torso.receiveShadow = true;
     root.add(torso);
 
     // Head
     const headGeo = new THREE.SphereGeometry(0.16, 16, 16);
     const head = new THREE.Mesh(headGeo, sMat);
     head.position.set(0, 0.4, 0);
+    head.castShadow = true;
     torso.add(head);
 
     // Visor/eyes
@@ -262,6 +745,7 @@ export class GameRenderer {
     const upperArmGeo = new THREE.CylinderGeometry(0.06, 0.05, 0.28, 8);
     const lUpperArm = new THREE.Mesh(upperArmGeo, sMat);
     lUpperArm.position.set(0, -0.14, 0);
+    lUpperArm.castShadow = true;
     leftArmGroup.add(lUpperArm);
 
     const lForearmGroup = new THREE.Group();
@@ -271,6 +755,7 @@ export class GameRenderer {
     const forearmGeo = new THREE.CylinderGeometry(0.05, 0.045, 0.26, 8);
     const lForearm = new THREE.Mesh(forearmGeo, pMat);
     lForearm.position.set(0, -0.13, 0);
+    lForearm.castShadow = true;
     lForearmGroup.add(lForearm);
 
     // Right Arm (Front arm)
@@ -280,6 +765,7 @@ export class GameRenderer {
 
     const rUpperArm = new THREE.Mesh(upperArmGeo, sMat);
     rUpperArm.position.set(0, -0.14, 0);
+    rUpperArm.castShadow = true;
     rightArmGroup.add(rUpperArm);
 
     const rForearmGroup = new THREE.Group();
@@ -288,14 +774,16 @@ export class GameRenderer {
 
     const rForearm = new THREE.Mesh(forearmGeo, pMat);
     rForearm.position.set(0, -0.13, 0);
+    rForearm.castShadow = true;
     rForearmGroup.add(rForearm);
 
     // Pelvis
     const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.16, 0.22), jointMat);
     pelvis.position.set(0, -0.3, 0);
+    pelvis.castShadow = true;
     torso.add(pelvis);
 
-    // Left Leg (Back leg)
+    // Left Leg
     const leftLegGroup = new THREE.Group();
     leftLegGroup.position.set(0, -0.08, -0.11);
     pelvis.add(leftLegGroup);
@@ -303,6 +791,7 @@ export class GameRenderer {
     const thighGeo = new THREE.CylinderGeometry(0.075, 0.06, 0.38, 8);
     const lThigh = new THREE.Mesh(thighGeo, pMat);
     lThigh.position.set(0, -0.19, 0);
+    lThigh.castShadow = true;
     leftLegGroup.add(lThigh);
 
     const lShinGroup = new THREE.Group();
@@ -312,15 +801,17 @@ export class GameRenderer {
     const shinGeo = new THREE.CylinderGeometry(0.06, 0.05, 0.38, 8);
     const lShin = new THREE.Mesh(shinGeo, sMat);
     lShin.position.set(0, -0.19, 0);
+    lShin.castShadow = true;
     lShinGroup.add(lShin);
 
-    // Right Leg (Front leg)
+    // Right Leg
     const rightLegGroup = new THREE.Group();
     rightLegGroup.position.set(0, -0.08, 0.11);
     pelvis.add(rightLegGroup);
 
     const rThigh = new THREE.Mesh(thighGeo, pMat);
     rThigh.position.set(0, -0.19, 0);
+    rThigh.castShadow = true;
     rightLegGroup.add(rThigh);
 
     const rShinGroup = new THREE.Group();
@@ -329,18 +820,13 @@ export class GameRenderer {
 
     const rShin = new THREE.Mesh(shinGeo, sMat);
     rShin.position.set(0, -0.19, 0);
+    rShin.castShadow = true;
     rShinGroup.add(rShin);
 
-    // Archetype specific accessory
     if (archetype.startsWith("grappler")) {
       const shoulderPad = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.18), sMat);
       shoulderPad.position.set(0, 0.1, 0);
       rightArmGroup.add(shoulderPad);
-    } else if (archetype.startsWith("hybrid")) {
-      const wing = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.35, 4), sMat);
-      wing.rotation.x = Math.PI / 2;
-      wing.position.set(-0.15, 0.1, 0);
-      torso.add(wing);
     }
 
     return {
@@ -358,7 +844,7 @@ export class GameRenderer {
     };
   }
 
-  private poseFighter(parts: FighterBodyParts, fighter: FighterRuntime): void {
+  private poseProceduralFighter(parts: FighterBodyParts, fighter: FighterRuntime): void {
     const t = fighter.stateTime * 0.15;
 
     // Reset rotations
@@ -398,7 +884,7 @@ export class GameRenderer {
         const walkCycle = Math.sin(t * 2.5);
         parts.rightLeg.rotation.z = -walkCycle * 0.5;
         parts.leftLeg.rotation.z = walkCycle * 0.5;
-        parts.rightArm.rotation.z = 0.8; // Guard raised while walking back
+        parts.rightArm.rotation.z = 0.8;
         parts.rightForearm.rotation.z = -1.2;
         break;
       }
@@ -445,7 +931,7 @@ export class GameRenderer {
       }
       case "victory": {
         parts.torso.position.y = 1.2;
-        parts.rightArm.rotation.z = 2.8; // arm raised in triumph
+        parts.rightArm.rotation.z = 2.8;
         parts.leftArm.rotation.z = 0.3;
         break;
       }
@@ -462,7 +948,7 @@ export class GameRenderer {
       }
       case "attackActive": {
         parts.torso.rotation.z = 0.35;
-        parts.rightArm.rotation.z = 1.5; // punch forward!
+        parts.rightArm.rotation.z = 1.5;
         parts.rightForearm.rotation.z = 0.1;
         parts.leftArm.rotation.z = -0.4;
         parts.leftLeg.rotation.z = -0.4;
@@ -478,51 +964,73 @@ export class GameRenderer {
     }
   }
 
-  // --- Projectiles ---
+  // --- Projectiles with Energy Glow ---
 
   private renderProjectiles(projectiles: ProjectileRuntime[]): void {
-    // Resize pool if needed
     while (this.projectilePool.length < projectiles.length) {
-      const pGeo = new THREE.SphereGeometry(0.18, 12, 12);
-      const pMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
-      const mesh = new THREE.Mesh(pGeo, pMat);
-      this.scene.add(mesh);
-      this.projectilePool.push(mesh);
+      const group = new THREE.Group();
+
+      const coreGeo = new THREE.SphereGeometry(0.18, 12, 12);
+      const coreMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+      const core = new THREE.Mesh(coreGeo, coreMat);
+      group.add(core);
+
+      const auraGeo = new THREE.SphereGeometry(0.28, 12, 12);
+      const auraMat = new THREE.MeshBasicMaterial({
+        color: 0x0284c7,
+        transparent: true,
+        opacity: 0.45,
+        blending: THREE.AdditiveBlending,
+      });
+      const aura = new THREE.Mesh(auraGeo, auraMat);
+      group.add(aura);
+
+      this.scene.add(group);
+      this.projectilePool.push({ core, aura, group });
     }
 
     for (let i = 0; i < this.projectilePool.length; i++) {
-      const mesh = this.projectilePool[i]!;
+      const entry = this.projectilePool[i]!;
       if (i < projectiles.length) {
         const p = projectiles[i]!;
-        mesh.visible = true;
-        mesh.position.set(p.x / 1000, p.y / 1000, 0);
-        // Change color based on kind
+        entry.group.visible = true;
+        entry.group.position.set(p.x / 1000, p.y / 1000, 0.1);
+
         if (p.kind === "zone") {
-          mesh.scale.set(1.5, 2.5, 0.5);
-          (mesh.material as THREE.MeshBasicMaterial).color.setHex(0xf59e0b);
+          entry.core.scale.set(1.4, 2.6, 0.6);
+          entry.aura.scale.set(1.8, 3.2, 0.9);
+          (entry.core.material as THREE.MeshBasicMaterial).color.setHex(0xf59e0b);
+          (entry.aura.material as THREE.MeshBasicMaterial).color.setHex(0xd97706);
         } else {
-          mesh.scale.set(1, 1, 1);
-          (mesh.material as THREE.MeshBasicMaterial).color.setHex(0x38bdf8);
+          entry.core.scale.set(1, 1, 1);
+          entry.aura.scale.set(1.3, 1.3, 1.3);
+          (entry.core.material as THREE.MeshBasicMaterial).color.setHex(0x38bdf8);
+          (entry.aura.material as THREE.MeshBasicMaterial).color.setHex(0x0284c7);
         }
       } else {
-        mesh.visible = false;
+        entry.group.visible = false;
       }
     }
   }
 
-  // --- Particle VFX ---
+  // --- High-Velocity Additive Sparks & Impact Flash ---
 
-  private spawnSparks(x: number, y: number, colorHex: number, count: number): void {
-    const geo = new THREE.PlaneGeometry(0.08, 0.08);
-    const mat = new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.DoubleSide });
+  private spawnSparks(x: number, y: number, colorHex: number, count: number, speedScale = 0.12): void {
+    const geo = new THREE.PlaneGeometry(0.09, 0.09);
+    const mat = new THREE.MeshBasicMaterial({
+      color: colorHex,
+      side: THREE.DoubleSide,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+    });
 
     for (let i = 0; i < count; i++) {
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(x, y, 0.1);
+      mesh.position.set(x, y, 0.15);
       this.sparkGroup.add(mesh);
 
       const angle = Math.random() * Math.PI * 2;
-      const speed = 0.05 + Math.random() * 0.12;
+      const speed = speedScale * (0.5 + Math.random() * 0.9);
 
       this.sparks.push({
         mesh,
@@ -530,19 +1038,25 @@ export class GameRenderer {
         maxLife: 10 + Math.random() * 8,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
+        vz: (Math.random() - 0.5) * speed * 0.5,
+        rotSpeed: (Math.random() - 0.5) * 0.4,
       });
     }
   }
 
   private updateSparks(): void {
-    const alive: typeof this.sparks = [];
+    const alive: SparkParticle[] = [];
     for (const s of this.sparks) {
       s.life++;
       s.mesh.position.x += s.vx;
       s.mesh.position.y += s.vy;
-      s.mesh.rotation.z += 0.2;
-      const scale = 1 - s.life / s.maxLife;
+      s.mesh.position.z += s.vz;
+      s.mesh.rotation.z += s.rotSpeed;
+
+      const progress = s.life / s.maxLife;
+      const scale = 1 - progress;
       s.mesh.scale.set(scale, scale, 1);
+      (s.mesh.material as THREE.MeshBasicMaterial).opacity = 1 - progress;
 
       if (s.life < s.maxLife) {
         alive.push(s);
@@ -553,7 +1067,23 @@ export class GameRenderer {
     this.sparks = alive;
   }
 
-  // --- Debug Boxes ---
+  private triggerImpactFlash(opacity = 0.3): void {
+    this.impactFlashOpacity = opacity;
+  }
+
+  private updateImpactFlash(): void {
+    if (this.impactFlashMesh) {
+      if (this.impactFlashOpacity > 0.01) {
+        (this.impactFlashMesh.material as THREE.MeshBasicMaterial).opacity = this.impactFlashOpacity;
+        this.impactFlashMesh.visible = true;
+        this.impactFlashOpacity *= 0.7; // Fast decay
+      } else {
+        this.impactFlashMesh.visible = false;
+      }
+    }
+  }
+
+  // --- Debug Boxes (Pushbox, Hurtbox, Hitbox) ---
 
   private renderDebugBoxes(state: MatchState): void {
     this.debugBoxGroup.clear();
@@ -620,90 +1150,30 @@ export class GameRenderer {
     this.debugBoxGroup.add(line);
   }
 
-  // --- Stage Texture Generator ---
+  // --- Fallback Canvas Texture Generator ---
 
-  private createStageTexture(stageId: string, layer: "mid" | "back"): THREE.CanvasTexture {
+  private createFallbackStageTexture(stageId: string): THREE.CanvasTexture {
     const canvas = document.createElement("canvas");
     canvas.width = 1024;
     canvas.height = 512;
     const ctx = canvas.getContext("2d")!;
 
-    if (layer === "back") {
-      // Atmospheric gradient
-      const grad = ctx.createLinearGradient(0, 0, 0, 512);
-      if (stageId === "serverrum") {
-        grad.addColorStop(0, "#030712");
-        grad.addColorStop(1, "#0f172a");
-      } else if (stageId === "fikarum") {
-        grad.addColorStop(0, "#1c1917");
-        grad.addColorStop(1, "#292524");
-      } else if (stageId === "kontor") {
-        grad.addColorStop(0, "#082f49");
-        grad.addColorStop(1, "#0c4a6e");
-      } else {
-        grad.addColorStop(0, "#1e1b4b");
-        grad.addColorStop(1, "#312e81");
-      }
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 1024, 512);
-
-      // Distant building windows / lights
-      ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
-      for (let i = 0; i < 40; i++) {
-        const x = (i * 28) % 1024;
-        const y = 100 + ((i * 37) % 250);
-        ctx.fillRect(x, y, 14, 8);
-      }
+    const grad = ctx.createLinearGradient(0, 0, 0, 512);
+    if (stageId === "serverrum") {
+      grad.addColorStop(0, "#030712");
+      grad.addColorStop(1, "#0f172a");
+    } else if (stageId === "fikarum") {
+      grad.addColorStop(0, "#1c1917");
+      grad.addColorStop(1, "#292524");
+    } else if (stageId === "kontor") {
+      grad.addColorStop(0, "#082f49");
+      grad.addColorStop(1, "#0c4a6e");
     } else {
-      // Midground: Transparent canvas with architectural silhouettes
-      ctx.clearRect(0, 0, 1024, 512);
-
-      if (stageId === "serverrum") {
-        // Server racks with glowing LEDs
-        for (let r = 0; r < 8; r++) {
-          const rx = 60 + r * 120;
-          ctx.fillStyle = "#1e293b";
-          ctx.fillRect(rx, 160, 90, 350);
-          ctx.strokeStyle = "#334155";
-          ctx.strokeRect(rx, 160, 90, 350);
-
-          // LED lights
-          for (let row = 0; row < 12; row++) {
-            ctx.fillStyle = (r + row) % 3 === 0 ? "#22c55e" : (r + row) % 4 === 0 ? "#3b82f6" : "#f59e0b";
-            ctx.fillRect(rx + 15, 180 + row * 24, 6, 4);
-            ctx.fillRect(rx + 30, 180 + row * 24, 6, 4);
-          }
-        }
-      } else if (stageId === "fikarum") {
-        // Coffee bar, snack machine, chairs
-        ctx.fillStyle = "#44403c";
-        ctx.fillRect(150, 240, 280, 270); // Counter
-        ctx.fillStyle = "#78716c";
-        ctx.fillRect(200, 180, 120, 60); // Coffee machine
-        ctx.fillStyle = "#0284c7";
-        ctx.fillRect(600, 150, 180, 360); // Vending machine
-      } else if (stageId === "kontor") {
-        // Desks with monitors
-        for (let d = 0; d < 4; d++) {
-          const dx = 80 + d * 240;
-          ctx.fillStyle = "#334155";
-          ctx.fillRect(dx, 320, 180, 190); // Desk
-          ctx.fillStyle = "#0284c7";
-          ctx.fillRect(dx + 50, 220, 80, 55); // Monitor glowing screen
-          ctx.fillStyle = "#64748b";
-          ctx.fillRect(dx + 85, 275, 10, 45); // Stand
-        }
-      } else {
-        // Konferens: Boardroom table and screen
-        ctx.fillStyle = "#1e1b4b";
-        ctx.fillRect(200, 100, 624, 200); // Big projector screen
-        ctx.fillStyle = "#38bdf8";
-        ctx.font = "bold 32px sans-serif";
-        ctx.fillText("AROS IT-PARTNER STRATEGI", 280, 210);
-        ctx.fillStyle = "#312e81";
-        ctx.fillRect(100, 340, 824, 170); // Conference table
-      }
+      grad.addColorStop(0, "#1e1b4b");
+      grad.addColorStop(1, "#312e81");
     }
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 1024, 512);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;

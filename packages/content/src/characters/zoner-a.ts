@@ -27,6 +27,7 @@ export const ZONER_A: CharacterDef = {
   hurtAir: DEFAULT_HURT_AIR,
   colors: ["#2563eb", "#38bdf8"],
   animationProfileId: "zoner-a",
+  modelUrl: "/models/Xbot.glb",
   normals: {
     lp: "lp",
     hp: "hp",

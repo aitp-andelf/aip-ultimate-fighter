@@ -27,6 +27,7 @@ export const HYBRID_B: CharacterDef = {
   hurtAir: DEFAULT_HURT_AIR,
   colors: ["#0d9488", "#5eead4"],
   animationProfileId: "hybrid-b",
+  modelUrl: "/models/Xbot.glb",
   normals: {
     lp: "lp",
     hp: "hp",

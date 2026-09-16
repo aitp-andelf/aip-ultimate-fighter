@@ -27,6 +27,7 @@ export const HYBRID_A: CharacterDef = {
   hurtAir: DEFAULT_HURT_AIR,
   colors: ["#9333ea", "#c084fc"],
   animationProfileId: "hybrid-a",
+  modelUrl: "/models/RobotExpressive.glb",
   normals: {
     lp: "lp",
     hp: "hp",
