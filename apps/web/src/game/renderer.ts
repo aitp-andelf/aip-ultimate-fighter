@@ -1026,7 +1026,12 @@ export class GameRenderer {
     }
   }
 
-  /** Authored idle/walk retarget wraps both hands across the chest. Uncross, then squat. */
+  /**
+   * Authored idle/walk retarget wraps both hands across the chest.
+   * Idle needs a modest uncross; walk/backwalk/dash swing one arm across harder
+   * (retarget artifact), so locomotion uses a stronger + slightly skewed overlay.
+   * Then apply duck squat. Runs after mixer.update.
+   */
   private applyAuthoredDuck(
     fighter: LoadedFighterState,
     runtime: FighterRuntime,
@@ -1041,10 +1046,28 @@ export class GameRenderer {
       runtime.state === "attackActive" ||
       runtime.state === "attackRecovery";
     if (!attacking) {
-      bones.lUpper?.rotateX(-0.52);
-      bones.rUpper?.rotateX(-0.52);
-      bones.lFore?.rotateX(-0.35);
-      bones.rFore?.rotateX(-0.35);
+      const walking =
+        runtime.state === "walkForward" ||
+        runtime.state === "walkBackward" ||
+        runtime.state === "dash";
+      if (walking) {
+        // Stronger uncross than idle; R slightly more — walk clip crosses the
+        // camera-side arm deeper across the chest on Irstababben / shared rig.
+        bones.lUpper?.rotateX(-0.82);
+        bones.rUpper?.rotateX(-0.95);
+        bones.lFore?.rotateX(-0.52);
+        bones.rFore?.rotateX(-0.62);
+        // Nudge elbows outward so the swing stays off the torso silhouette.
+        bones.lUpper?.rotateY(0.22);
+        bones.rUpper?.rotateY(-0.28);
+        bones.lFore?.rotateY(0.08);
+        bones.rFore?.rotateY(-0.10);
+      } else {
+        bones.lUpper?.rotateX(-0.52);
+        bones.rUpper?.rotateX(-0.52);
+        bones.lFore?.rotateX(-0.35);
+        bones.rFore?.rotateX(-0.35);
+      }
     }
 
     const move = runtime.moveId ? char.moves[runtime.moveId] : undefined;
