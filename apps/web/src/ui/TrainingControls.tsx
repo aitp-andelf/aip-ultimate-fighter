@@ -45,6 +45,25 @@ export const TrainingControls: React.FC<TrainingControlsProps> = ({
         Visa Hitboxar
       </label>
 
+      <div>
+        <label className="text-[10px] font-bold text-slate-400 uppercase block">Rig-diag:</label>
+        <select
+          value={settings.rigDiag ?? "off"}
+          onChange={(e) => {
+            sound.playUiClick();
+            onChange({ ...settings, rigDiag: e.target.value as any });
+          }}
+          className="mt-1 rounded bg-slate-800 px-2 py-1 text-xs font-bold text-white border border-slate-700"
+          title="A bind · B joint probe · C mixer only · D mixer+overlay"
+        >
+          <option value="off">Av (normal)</option>
+          <option value="A">A — bind/rest</option>
+          <option value="B">B — ledprobe</option>
+          <option value="C">C — bara mixer</option>
+          <option value="D">D — mixer+overlay</option>
+        </select>
+      </div>
+
       <label className="flex items-center gap-2 text-xs font-semibold text-slate-200 cursor-pointer">
         <input
           type="checkbox"

@@ -78,6 +78,7 @@ export class LocalMatchController {
   public setTrainingSettings(settings: TrainingSettings): void {
     this.state.training = settings;
     this.renderer.showBoxes = settings.showBoxes;
+    if (settings.rigDiag) this.renderer.rigDiagMode = settings.rigDiag;
   }
 
   public resetPositions(): void {

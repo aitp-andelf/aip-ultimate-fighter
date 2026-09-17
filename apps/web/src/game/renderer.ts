@@ -1,6 +1,14 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
+import {
+  applyArmUncross,
+  captureCleanPose,
+  parseRigDiagMode,
+  restoreCleanPose,
+  type CleanPoseCache,
+  type RigDiagMode,
+} from "./authoredOverlay.ts";
 import type { CharacterDef } from "@aipuf/contracts";
 import {
   getHitboxes,
@@ -57,6 +65,8 @@ interface LoadedFighterState {
     rFore: THREE.Object3D | null;
   } | null;
   authoredScale: number;
+  /** Mixer-evaluated pose before arm/duck overlay (null until first capture). */
+  cleanPose: CleanPoseCache | null;
 }
 
 function isAuthoredFighterModel(url?: string): boolean {
@@ -128,6 +138,8 @@ export class GameRenderer {
   // Debug Box Overlays
   private debugBoxGroup: THREE.Group;
   public showBoxes = false;
+  /** A bind · B joint probe · C mixer only · D mixer+overlay · off normal */
+  public rigDiagMode: RigDiagMode = "off";
 
   private currentStageId = "";
   private textureLoader = new THREE.TextureLoader();
@@ -136,6 +148,9 @@ export class GameRenderer {
   constructor(options: RendererOptions) {
     this.container = options.container;
     this.showBoxes = options.showBoxes ?? false;
+    if (typeof window !== "undefined") {
+      this.rigDiagMode = parseRigDiagMode(new URLSearchParams(window.location.search).get("rigDiag"));
+    }
     this.shadowTexture = this.createShadowTexture();
 
     // Scene setup
@@ -211,6 +226,7 @@ export class GameRenderer {
       duckAmount: 0,
       duckBones: null,
       authoredScale: 1,
+      cleanPose: null,
     };
 
     this.fighter1 = {
@@ -229,6 +245,7 @@ export class GameRenderer {
       duckAmount: 0,
       duckBones: null,
       authoredScale: 1,
+      cleanPose: null,
     };
 
     // Build procedural models immediately as zero-latency fallback
@@ -447,6 +464,7 @@ export class GameRenderer {
       fighter.currentState = "";
       fighter.isGltfLoaded = true;
       fighter.duckAmount = 0;
+      fighter.cleanPose = null;
       const bone = (name: string) => clonedScene.getObjectByName(name) ?? null;
       const hip = bone("Hip") ?? bone("Pelvis") ?? bone("hips");
       fighter.duckBones = hip
@@ -793,12 +811,49 @@ export class GameRenderer {
     char: CharacterDef
   ): void {
     if (fighter.isGltfLoaded && fighter.mixer) {
+      const mode = this.rigDiagMode;
+      // A: bind/rest — no mixer, no overlay (fresh local TRS left as imported).
+      if (mode === "A") {
+        return;
+      }
+      // B: controlled joint probe on top of bind (isolates skin vs clip).
+      if (mode === "B") {
+        this.applyJointProbe(fighter);
+        return;
+      }
+
+      // Restore last clean mixer pose so relative overlays cannot accumulate
+      // when PropertyMixer skips unchanged channels (hit-stop dt=0).
+      if (fighter.duckBones && fighter.cleanPose) {
+        restoreCleanPose(fighter.duckBones, fighter.cleanPose);
+      }
+
       this.playRiggedAnimation(fighter, runtime, char);
       fighter.mixer.update(dt);
+
+      if (fighter.duckBones) {
+        fighter.cleanPose = captureCleanPose(fighter.duckBones);
+      }
+
+      // C: mixer only — skip authored arm/duck overlay.
+      if (mode === "C") {
+        return;
+      }
+
+      // D or off: apply overlay exactly once on the fresh clean pose.
       this.applyAuthoredDuck(fighter, runtime, char, dt);
     } else if (fighter.proceduralParts) {
       this.poseProceduralFighter(fighter.proceduralParts, runtime);
     }
+  }
+
+  /** Diagnostic B: bend one elbow / raise one shoulder along local axes. */
+  private applyJointProbe(fighter: LoadedFighterState): void {
+    const bones = fighter.duckBones;
+    if (!bones) return;
+    bones.rUpper?.rotateX(-0.7);
+    bones.rFore?.rotateX(-1.1);
+    bones.lUpper?.rotateX(-0.25);
   }
 
   private fighterYaw(fighter: LoadedFighterState, runtime: FighterRuntime): number {
@@ -1031,9 +1086,8 @@ export class GameRenderer {
 
   /**
    * Authored idle/walk retarget wraps both hands across the chest.
-   * Idle needs a modest uncross; walk/backwalk/dash swing one arm across harder
-   * (retarget artifact), so locomotion uses a stronger + slightly skewed overlay.
-   * Then apply duck squat. Runs after mixer.update.
+   * Applies arm uncross + duck squat once on the clean mixer pose.
+   * Caller must restoreCleanPose before mixer.update and captureCleanPose after.
    */
   private applyAuthoredDuck(
     fighter: LoadedFighterState,
@@ -1053,24 +1107,9 @@ export class GameRenderer {
         runtime.state === "walkForward" ||
         runtime.state === "walkBackward" ||
         runtime.state === "dash";
-      if (walking) {
-        // Stronger uncross than idle; R slightly more — walk clip crosses the
-        // camera-side arm deeper across the chest on Irstababben / shared rig.
-        bones.lUpper?.rotateX(-0.82);
-        bones.rUpper?.rotateX(-0.95);
-        bones.lFore?.rotateX(-0.52);
-        bones.rFore?.rotateX(-0.62);
-        // Nudge elbows outward so the swing stays off the torso silhouette.
-        bones.lUpper?.rotateY(0.22);
-        bones.rUpper?.rotateY(-0.28);
-        bones.lFore?.rotateY(0.08);
-        bones.rFore?.rotateY(-0.10);
-      } else {
-        bones.lUpper?.rotateX(-0.52);
-        bones.rUpper?.rotateX(-0.52);
-        bones.lFore?.rotateX(-0.35);
-        bones.rFore?.rotateX(-0.35);
-      }
+      // Relative deltas — safe only because updateFighterAnimation restored
+      // the clean mixer pose first (see cleanPose capture/restore).
+      applyArmUncross(bones, walking);
     }
 
     const move = runtime.moveId ? char.moves[runtime.moveId] : undefined;

@@ -6,6 +6,8 @@ export interface TrainingSettings {
   infiniteMeter: boolean;
   dummy: "stand" | "block" | "crouch" | "recorded";
   showBoxes: boolean;
+  /** A=bind, B=joint probe, C=mixer only, D=mixer+overlay, off=normal */
+  rigDiag?: "off" | "A" | "B" | "C" | "D";
 }
 
 export interface SimEvent {

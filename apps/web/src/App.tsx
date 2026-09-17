@@ -46,6 +46,7 @@ export const App: React.FC = () => {
     infiniteMeter: true,
     dummy: "stand",
     showBoxes: false,
+    rigDiag: "off",
   });
 
   // Online networking state
