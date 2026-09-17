@@ -1082,9 +1082,18 @@ export class GameRenderer {
     const d = fighter.duckAmount;
     if (d < 0.01) return;
 
-    // Root X-90: Hip local Z is world up. Flex thighs then plant feet — never squash.
-    bones.lThigh?.rotateX(-0.79 * d);
-    bones.rThigh?.rotateX(-0.79 * d);
+    // Fighting knäböj on the Mixamo-style authored rig (Root X=-90, 3/4 yaw):
+    // same-sign thigh rotateX sits the hips back (~0.57 lean). Opposite flex
+    // signs scaled by facing keep the torso over the feet; abduct (Z) restores
+    // knee spread so the squat is not knock-kneed. Never mesh-squash.
+    // Hip.position.z is still Root-space height — plant feet with it only.
+    const facing = runtime.facing === -1 ? -1 : 1;
+    const flex = 0.5 * d;
+    const abd = 0.35 * d;
+    bones.lThigh?.rotateX(-flex * facing);
+    bones.rThigh?.rotateX(flex * facing);
+    bones.lThigh?.rotateZ(abd);
+    bones.rThigh?.rotateZ(-abd);
 
     bones.hip.updateWorldMatrix(true, true);
     const s = fighter.authoredScale || 1;
@@ -1096,7 +1105,7 @@ export class GameRenderer {
       if (world.y < minY) minY = world.y;
     }
     if (Number.isFinite(minY)) {
-      bones.hip.position.z -= THREE.MathUtils.clamp(minY / s, -0.08, 0.12);
+      bones.hip.position.z -= THREE.MathUtils.clamp(minY / s, -0.08, 0.14);
     }
   }
 
