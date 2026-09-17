@@ -4,8 +4,8 @@ import { CHARACTERS, CHARACTER_LIST, getCharacter } from "./characters/index.ts"
 import { STAGES, STAGE_LIST } from "./stages/index.ts";
 
 describe("packages/content", () => {
-  it("defines all 8 required characters", () => {
-    expect(CHARACTER_IDS.length).toBe(8);
+  it("defines all required characters", () => {
+    expect(CHARACTER_IDS.length).toBe(10);
     for (const id of CHARACTER_IDS) {
       const char = getCharacter(id);
       expect(char).toBeDefined();
@@ -67,7 +67,7 @@ describe("packages/content", () => {
     }
   });
 
-  it("ensures archetypes are evenly distributed across the 8 fighters", () => {
+  it("ensures archetypes are cover the classic eight plus Benny and Tård", () => {
     const archetypes = CHARACTER_LIST.map((c) => c.archetype);
     expect(archetypes).toContain("zoner-a");
     expect(archetypes).toContain("zoner-b");
@@ -77,6 +77,8 @@ describe("packages/content", () => {
     expect(archetypes).toContain("grappler-b");
     expect(archetypes).toContain("hybrid-a");
     expect(archetypes).toContain("hybrid-b");
+    expect(archetypes).toContain("benny");
+    expect(archetypes).toContain("tard");
   });
 
   it("ensures stages have valid bounds and layers", () => {

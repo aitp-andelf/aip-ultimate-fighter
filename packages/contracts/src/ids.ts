@@ -53,7 +53,7 @@ export const ButtonNames: Record<number, string> = {
 };
 
 export type HitCategory = "HIGH" | "MID" | "LOW" | "OVERHEAD" | "THROW";
-export type Archetype = "zoner-a" | "zoner-b" | "shoto-a" | "shoto-b" | "grappler-a" | "grappler-b" | "hybrid-a" | "hybrid-b";
+export type Archetype = "zoner-a" | "zoner-b" | "shoto-a" | "shoto-b" | "grappler-a" | "grappler-b" | "hybrid-a" | "hybrid-b" | "benny" | "tard";
 export type SlotId = "p1" | "p2";
 export type RoomPhase = "lobby" | "countdown" | "fighting" | "round_end" | "match_end";
 
@@ -66,6 +66,8 @@ export const CHARACTER_IDS = [
   "grappler-b",
   "hybrid-a",
   "hybrid-b",
+  "benny",
+  "tard",
 ] as const;
 
 export type CharacterId = (typeof CHARACTER_IDS)[number];

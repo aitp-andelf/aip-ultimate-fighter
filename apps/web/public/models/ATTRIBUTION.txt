@@ -1,3 +1,5 @@
 KayKit Character Animations (CC0) by Kay Lousberg — https://kaylousberg.itch.io/kaykit-character-animations
 Retargeted onto Tripo3D meshes for Capitan, Irstababben, Femboyfippe, Babas, Stinkfiend, Ekander, and Goonström.
 Each fighter uses a distinct KayKit clip family (unarmed / 1H / 2H / tools / magic / skeleton / bow).
+
+Also Benny Blåsfisk and Tård (Tripo3D meshes + KayKit clips retargeted from Irstababben donor).

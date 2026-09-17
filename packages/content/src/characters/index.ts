@@ -7,9 +7,11 @@ import { GRAPPLER_A } from "./grappler-a.ts";
 import { GRAPPLER_B } from "./grappler-b.ts";
 import { HYBRID_A } from "./hybrid-a.ts";
 import { HYBRID_B } from "./hybrid-b.ts";
+import { BENNY } from "./benny.ts";
+import { TARD } from "./tard.ts";
 
 export * from "./common.ts";
-export { ZONER_A, ZONER_B, SHOTO_A, SHOTO_B, GRAPPLER_A, GRAPPLER_B, HYBRID_A, HYBRID_B };
+export { ZONER_A, ZONER_B, SHOTO_A, SHOTO_B, GRAPPLER_A, GRAPPLER_B, HYBRID_A, HYBRID_B, BENNY, TARD };
 
 export const CHARACTERS: Record<CharacterId, CharacterDef> = {
   "zoner-a": ZONER_A,
@@ -20,6 +22,8 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
   "grappler-b": GRAPPLER_B,
   "hybrid-a": HYBRID_A,
   "hybrid-b": HYBRID_B,
+  benny: BENNY,
+  tard: TARD,
 };
 
 export const CHARACTER_LIST: CharacterDef[] = [
@@ -31,6 +35,8 @@ export const CHARACTER_LIST: CharacterDef[] = [
   GRAPPLER_B,
   HYBRID_A,
   HYBRID_B,
+  BENNY,
+  TARD,
 ];
 
 export function getCharacter(id: CharacterId): CharacterDef {

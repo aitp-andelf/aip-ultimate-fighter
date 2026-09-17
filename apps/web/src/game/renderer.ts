@@ -431,6 +431,9 @@ export class GameRenderer {
         actions[key] = action;
         const short = key.split("|").pop();
         if (short && !actions[short]) actions[short] = action;
+        // KayKit exports sometimes arrive as idle_Armature_name
+        const base = key.split("_armature")[0];
+        if (base && !actions[base]) actions[base] = action;
       }
 
       if (fighter.gltfRoot) {

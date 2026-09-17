@@ -10,19 +10,29 @@ interface FighterPortraitProps {
 export const FighterPortrait: React.FC<FighterPortraitProps> = ({
   char,
   className = "",
-  imgClassName = "h-full w-full object-cover object-top",
+  imgClassName = "h-full w-full object-cover object-[center_20%]",
 }) => {
   if (char.portraitUrl) {
     return (
-      <div className={className}>
-        <img src={char.portraitUrl} alt={char.name} className={imgClassName} />
+      <div className={`overflow-hidden ${className}`}>
+        <img
+          src={char.portraitUrl}
+          alt={char.name}
+          className={imgClassName}
+          draggable={false}
+        />
       </div>
     );
   }
 
+  const initial = char.name.trim().charAt(0).toUpperCase() || "?";
   return (
-    <span className={`flex items-center justify-center font-arcade font-black text-white ${className}`}>
-      {char.name.charAt(0)}
-    </span>
+    <div
+      className={`flex items-center justify-center font-arcade font-black text-white ${className}`}
+      style={{ background: `linear-gradient(145deg, ${char.colors[0]}, ${char.colors[1] ?? char.colors[0]})` }}
+      aria-label={char.name}
+    >
+      <span className="text-3xl drop-shadow">{initial}</span>
+    </div>
   );
 };

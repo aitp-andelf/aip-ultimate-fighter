@@ -104,7 +104,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
         </div>
       </div>
 
-      {/* Main Grid: P1 Card + 8 Fighter Roster + P2 Card */}
+      {/* Main Grid: P1 Card + Fighter Roster + P2 Card */}
       <div className="grid flex-1 grid-cols-12 gap-5 p-5 overflow-hidden">
         {/* P1 Card (Left Column) */}
         <div className="col-span-3 flex flex-col justify-between rounded-2xl border-2 border-blue-500/80 bg-gradient-to-b from-blue-950/60 via-slate-950/90 to-slate-950 p-5 shadow-[0_0_30px_rgba(59,130,246,0.25)] backdrop-blur">
@@ -122,7 +122,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
             </div>
 
             {/* Fighter Portrait Banner */}
-            <div className="relative mt-3 flex h-24 w-full items-center justify-center overflow-hidden rounded-xl border border-blue-500/40 bg-gradient-to-tr from-blue-950 via-slate-900 to-blue-900/50 shadow-inner">
+            <div className="relative mt-3 flex h-44 w-full items-center justify-center overflow-hidden rounded-xl border border-blue-500/40 bg-gradient-to-tr from-blue-950 via-slate-900 to-blue-900/50 shadow-inner">
               <div
                 className="absolute inset-0 opacity-20"
                 style={{ backgroundColor: p1Char.colors[0] }}
@@ -130,7 +130,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
               <FighterPortrait
                 char={p1Char}
                 className="absolute inset-0"
-                imgClassName="h-full w-full object-cover object-[center_18%] opacity-90"
+                imgClassName="h-full w-full object-cover object-[center_12%] opacity-95"
               />
               <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between">
                 <span className="font-arcade text-xl font-black text-white drop-shadow">
@@ -175,7 +175,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
           </div>
         </div>
 
-        {/* Center: 8 Fighters + VS emblem + Stage Selector */}
+        {/* Center: Fighter roster + Stage Selector */}
         <div className="col-span-6 flex flex-col justify-between items-center">
           {/* Active Picker Indicator */}
           <div className="arcade-skew rounded bg-slate-900/90 border border-slate-700 px-5 py-1 text-xs font-black tracking-widest uppercase">
@@ -187,8 +187,8 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
             </span>
           </div>
 
-          {/* 8 Character Roster Grid */}
-          <div className="grid grid-cols-4 gap-3.5 w-full my-3">
+          {/* Character Roster Grid (10) */}
+          <div className="grid grid-cols-5 gap-2.5 w-full my-2">
             {CHARACTER_LIST.map((char) => {
               const isP1 = char.id === p1CharId;
               const isP2 = char.id === p2CharId;
@@ -198,7 +198,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
                   key={char.id}
                   onClick={() => handleCharClick(char.id)}
                   onMouseEnter={() => sound.playUiClick()}
-                  className={`group relative flex flex-col items-center justify-between rounded-xl border-2 p-3 transition-all hover:scale-105 active:scale-95 ${
+                  className={`group relative flex flex-col items-center justify-between rounded-xl border-2 p-2 transition-all hover:scale-[1.03] active:scale-95 ${
                     isP1
                       ? "border-blue-400 bg-blue-950/80 shadow-[0_0_25px_rgba(59,130,246,0.6)] ring-2 ring-blue-400"
                       : isP2
@@ -208,19 +208,19 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
                 >
                   {/* Portrait Avatar Circle */}
                   <div
-                    className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border-2 border-white/20 text-xl font-black text-white shadow-md group-hover:scale-110 transition duration-150"
+                    className="relative flex h-20 w-full aspect-square max-h-24 items-center justify-center overflow-hidden rounded-lg border-2 border-white/25 text-xl font-black text-white shadow-md group-hover:scale-[1.02] transition duration-150"
                     style={{ backgroundColor: char.colors[0] }}
                   >
                     <FighterPortrait
                       char={char}
                       className="absolute inset-0"
-                      imgClassName="h-full w-full object-cover object-[center_12%]"
+                      imgClassName="h-full w-full object-cover object-[center_15%]"
                     />
                   </div>
 
                   {/* Name & Archetype */}
                   <div className="mt-2 text-center w-full">
-                    <div className="font-arcade text-xs font-black tracking-wide text-white truncate group-hover:text-amber-300">
+                    <div className="font-arcade text-[11px] font-black tracking-wide text-white leading-tight line-clamp-2 group-hover:text-amber-300">
                       {char.name}
                     </div>
                     <div className="text-[9px] font-black uppercase text-slate-400 tracking-wider truncate">
@@ -306,7 +306,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
             </div>
 
             {/* Fighter Portrait Banner P2 */}
-            <div className="relative mt-3 flex h-24 w-full items-center justify-center overflow-hidden rounded-xl border border-rose-500/40 bg-gradient-to-tl from-rose-950 via-slate-900 to-rose-900/50 shadow-inner">
+            <div className="relative mt-3 flex h-44 w-full items-center justify-center overflow-hidden rounded-xl border border-rose-500/40 bg-gradient-to-tl from-rose-950 via-slate-900 to-rose-900/50 shadow-inner">
               <div
                 className="absolute inset-0 opacity-20"
                 style={{ backgroundColor: p2Char.colors[0] }}
@@ -314,7 +314,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
               <FighterPortrait
                 char={p2Char}
                 className="absolute inset-0"
-                imgClassName="h-full w-full object-cover object-[center_18%] opacity-90"
+                imgClassName="h-full w-full object-cover object-[center_12%] opacity-95"
               />
               <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between flex-row-reverse">
                 <span className="font-arcade text-xl font-black text-white drop-shadow">
