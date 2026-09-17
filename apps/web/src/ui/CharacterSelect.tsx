@@ -78,15 +78,15 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
           >
             <span className="arcade-skew-reverse flex items-center gap-1.5">
               <span>←</span>
-              <span>TILLBAKA</span>
+              <span>BACK</span>
             </span>
           </button>
           <div>
-            <h1 className="font-arcade text-2xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow">
-              VÄLJ KÄMPE
+            <h1 className="font-fighter text-3xl tracking-wide text-white">
+              SELECT FIGHTER
             </h1>
             <p className="text-[10px] font-bold tracking-widest text-amber-400/80 uppercase">
-              Aros IT-Partner Ultimate Tournament • Roster
+              Training roster
             </p>
           </div>
         </div>
@@ -94,10 +94,10 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
         <div className="flex items-center gap-4">
           <button
             onClick={handleStart}
-            className="arcade-skew group relative overflow-hidden rounded border-2 border-emerald-400 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-500 px-8 py-2 font-arcade text-sm font-black tracking-widest text-slate-950 shadow-[0_0_25px_rgba(16,185,129,0.4)] transition hover:scale-105 hover:brightness-110 active:scale-95 cursor-pointer"
+            className="arcade-skew group relative overflow-hidden rounded border-2 border-emerald-400 border border-rose-500/80 bg-rose-950/80 px-8 py-2 font-fighter text-lg tracking-wide text-white shadow-[0_0_20px_rgba(225,29,72,0.25)] transition hover:scale-105 hover:brightness-110 active:scale-95 cursor-pointer"
           >
             <span className="arcade-skew-reverse flex items-center gap-2 text-white drop-shadow">
-              <span>STARTA STRID!</span>
+              <span>FIGHT</span>
               <span>➔</span>
             </span>
           </button>
@@ -111,13 +111,13 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
           <div>
             <div className="flex items-center justify-between">
               <span className="arcade-skew rounded bg-blue-600 px-3 py-1 text-xs font-black tracking-widest text-white uppercase shadow">
-                <span className="arcade-skew-reverse">SPELARE 1</span>
+                <span className="arcade-skew-reverse">PLAYER 1</span>
               </span>
               <button
                 onClick={() => { sound.playUiClick(); setP1Palette(p1Palette === 0 ? 1 : 0); }}
                 className="text-xs font-bold text-blue-400 underline hover:text-blue-300"
               >
-                Färg: {p1Palette === 0 ? "Standard" : "Alternativ"}
+                Color: {p1Palette === 0 ? "Default" : "Alt"}
               </button>
             </div>
 
@@ -160,11 +160,11 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
           {/* Moveset Payoffs */}
           <div className="space-y-2 text-xs">
             <div className="rounded-lg bg-slate-900/80 p-2 border border-slate-800">
-              <span className="font-black text-amber-400 text-[10px] uppercase block tracking-wider">SIGNATURE MOVE</span>
+              <span className="font-black text-amber-400 text-[10px] uppercase block tracking-wider">SPECIAL</span>
               <span className="font-arcade text-white text-xs block mt-0.5">{p1Char.signature || p1Char.normals.special1}</span>
             </div>
             <div className="rounded-lg bg-slate-900/80 p-2 border border-rose-900/40 bg-rose-950/20">
-              <span className="font-black text-rose-400 text-[10px] uppercase block tracking-wider">SUPER MOVE</span>
+              <span className="font-black text-rose-400 text-[10px] uppercase block tracking-wider">SUPER</span>
               <span className="font-arcade text-yellow-300 text-xs block mt-0.5">{p1Char.superName || p1Char.normals.super}</span>
             </div>
             {p1Char.voiceBarks?.special && (
@@ -180,9 +180,9 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
           {/* Active Picker Indicator */}
           <div className="arcade-skew rounded bg-slate-900/90 border border-slate-700 px-5 py-1 text-xs font-black tracking-widest uppercase">
             <span className="arcade-skew-reverse">
-              Aktiv Väljare:{" "}
+              Selecting:{" "}
               <span className={activePicker === "p1" ? "text-blue-400" : "text-rose-400"}>
-                {activePicker === "p1" ? "SPELARE 1" : "SPELARE 2"}
+                {activePicker === "p1" ? "PLAYER 1" : "PLAYER 2"}
               </span>
             </span>
           </div>
@@ -248,7 +248,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
           <div className="w-full rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 p-3 shadow-inner">
             <div className="mb-2 flex items-center justify-between px-2">
               <span className="font-arcade text-xs tracking-wider text-slate-300 uppercase">
-                VÄLJ STRIDSARENA
+                STAGE
               </span>
               <span className="font-arcade text-xs text-amber-400 uppercase">
                 {stage.name}
@@ -294,14 +294,14 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
             <div className="flex items-center justify-between flex-row-reverse">
               <span className="arcade-skew rounded bg-rose-600 px-3 py-1 text-xs font-black tracking-widest text-white uppercase shadow">
                 <span className="arcade-skew-reverse">
-                  {singlePlayer ? "DATOR (AI)" : "SPELARE 2"}
+                  {singlePlayer ? "DATOR (AI)" : "PLAYER 2"}
                 </span>
               </span>
               <button
                 onClick={() => { sound.playUiClick(); setP2Palette(p2Palette === 0 ? 1 : 0); }}
                 className="text-xs font-bold text-rose-400 underline hover:text-rose-300"
               >
-                Färg: {p2Palette === 0 ? "Standard" : "Alternativ"}
+                Color: {p2Palette === 0 ? "Default" : "Alt"}
               </button>
             </div>
 
@@ -344,11 +344,11 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
           {/* Moveset Payoffs P2 */}
           <div className="space-y-2 text-xs text-left">
             <div className="rounded-lg bg-slate-900/80 p-2 border border-slate-800">
-              <span className="font-black text-amber-400 text-[10px] uppercase block tracking-wider">SIGNATURE MOVE</span>
+              <span className="font-black text-amber-400 text-[10px] uppercase block tracking-wider">SPECIAL</span>
               <span className="font-arcade text-white text-xs block mt-0.5">{p2Char.signature || p2Char.normals.special1}</span>
             </div>
             <div className="rounded-lg bg-slate-900/80 p-2 border border-rose-900/40 bg-rose-950/20">
-              <span className="font-black text-rose-400 text-[10px] uppercase block tracking-wider">SUPER MOVE</span>
+              <span className="font-black text-rose-400 text-[10px] uppercase block tracking-wider">SUPER</span>
               <span className="font-arcade text-yellow-300 text-xs block mt-0.5">{p2Char.superName || p2Char.normals.super}</span>
             </div>
             {p2Char.voiceBarks?.special && (

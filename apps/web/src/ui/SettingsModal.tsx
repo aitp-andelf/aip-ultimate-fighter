@@ -22,7 +22,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm select-none">
       <div className="w-full max-w-xl rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl text-slate-100">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h2 className="text-xl font-black tracking-wider text-yellow-400">INSTÄLLNINGAR</h2>
+          <h2 className="text-xl font-black tracking-wider text-yellow-400">SETTINGS</h2>
           <button
             onClick={() => { sound.playUiClick(); onClose(); }}
             className="text-slate-400 hover:text-white font-bold"
@@ -81,11 +81,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <div className="grid grid-cols-2 gap-4 text-xs">
             <div className="rounded-lg bg-slate-950 p-3 border border-slate-800">
-              <span className="font-bold text-blue-400 block mb-1">Spelare 1 (Tangentbord / Kontroll)</span>
+              <span className="font-bold text-blue-400 block mb-1">Player 1 (Tangentbord / Kontroll)</span>
               <ul className="space-y-1 text-slate-300">
-                <li><strong className="text-white">W / A / S / D:</strong> Hoppa / Gå / Ducka</li>
-                <li><strong className="text-white">U / I:</strong> Låg / Hög box</li>
-                <li><strong className="text-white">J / K:</strong> Låg / Hög spark</li>
+                <li><strong className="text-white">W / A / S / D:</strong> Jump / Move / Crouch</li>
+                <li><strong className="text-white">U / I:</strong> Light / Heavy punch</li>
+                <li><strong className="text-white">J / K:</strong> Light / Heavy kick</li>
                 <li><strong className="text-white">O:</strong> Special</li>
                 <li><strong className="text-white">L:</strong> Super (1000 meter)</li>
                 <li><strong className="text-white">Mellanslag:</strong> Kast</li>
@@ -93,11 +93,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
 
             <div className="rounded-lg bg-slate-950 p-3 border border-slate-800">
-              <span className="font-bold text-rose-400 block mb-1">Spelare 2 (Tangentbord)</span>
+              <span className="font-bold text-rose-400 block mb-1">Player 2 (Tangentbord)</span>
               <ul className="space-y-1 text-slate-300">
-                <li><strong className="text-white">Piltangenter:</strong> Hoppa / Gå / Ducka</li>
-                <li><strong className="text-white">Num 4 / 5:</strong> Låg / Hög box</li>
-                <li><strong className="text-white">Num 1 / 2:</strong> Låg / Hög spark</li>
+                <li><strong className="text-white">Arrow keys:</strong> Jump / Move / Crouch</li>
+                <li><strong className="text-white">Num 4 / 5:</strong> Light / Heavy punch</li>
+                <li><strong className="text-white">Num 1 / 2:</strong> Light / Heavy kick</li>
                 <li><strong className="text-white">Num 6:</strong> Special</li>
                 <li><strong className="text-white">Num 3:</strong> Super</li>
                 <li><strong className="text-white">Num 0:</strong> Kast</li>
@@ -111,7 +111,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onClick={() => { sound.playUiClick(); onClose(); }}
             className="rounded-xl bg-blue-600 px-6 py-2 text-sm font-bold text-white hover:bg-blue-500"
           >
-            Stäng
+            Close
           </button>
         </div>
       </div>

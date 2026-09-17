@@ -55,7 +55,7 @@ export const App: React.FC = () => {
       ? "ws://localhost:2567"
       : `wss://${window.location.host}`;
   });
-  const [playerName, setPlayerName] = useState("ArosKämpe");
+  const [playerName, setPlayerName] = useState("Fighter");
   const [roomState, setRoomState] = useState<RoomStatePayload | null>(null);
   const [onlineSnapshot, setOnlineSnapshot] = useState<SnapshotPayload | null>(null);
 
@@ -197,156 +197,102 @@ export const App: React.FC = () => {
         }`}
       />
 
-      {/* Main Menu — Street Fighter / Arcade Edition */}
+      {/* Title screen */}
       {screen === "menu" && (
-        <div className="relative z-10 flex h-full w-full flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black overflow-hidden select-none">
-          {/* Background Ambient Glow & Diagonal Striping */}
-          <div className="absolute inset-0 opacity-15 bg-[repeating-linear-gradient(45deg,#000,#000_15px,#3b82f6_15px,#3b82f6_30px)] pointer-events-none" />
-          <div className="absolute top-1/4 -left-32 h-96 w-96 rounded-full bg-blue-600/20 blur-3xl pointer-events-none" />
-          <div className="absolute bottom-1/4 -right-32 h-96 w-96 rounded-full bg-red-600/20 blur-3xl pointer-events-none" />
+        <div className="relative z-10 flex h-full w-full flex-col items-center justify-center overflow-hidden bg-[#07070a] select-none">
+          {/* Stage backdrop — dark, quiet, cabinet-like */}
+          <div
+            className="absolute inset-0 opacity-40"
+            style={{
+              backgroundImage:
+                "linear-gradient(180deg, #1a0508 0%, #07070a 45%, #050508 100%), radial-gradient(ellipse 80% 50% at 50% 120%, rgba(225,29,72,0.22), transparent 60%)",
+            }}
+          />
+          <div className="absolute inset-0 menu-scanlines opacity-30" />
+          <div className="absolute inset-0 menu-vignette" />
 
-          {/* Title Header */}
-          <div className="relative z-10 flex flex-col items-center mb-8">
-            <div className="flex items-center gap-3 mb-2 arcade-skew">
-              <span className="rounded bg-gradient-to-r from-red-600 to-amber-600 px-3.5 py-1 text-xs font-black tracking-widest text-white uppercase shadow-[0_0_12px_rgba(239,68,68,0.8)] border border-red-400/40">
-                AROS IT-PARTNER
-              </span>
-              <span className="rounded bg-slate-900/90 px-3 py-1 text-xs font-bold tracking-wider text-amber-300 border border-amber-500/40">
-                ARCADE EDITION
-              </span>
-              {isSharePoint && (
-                <span className="rounded bg-emerald-600 px-3 py-1 text-xs font-bold text-white shadow">
-                  SharePoint Integrerad
-                </span>
-              )}
-            </div>
-
-            <h1 className="font-arcade text-7xl sm:text-8xl tracking-tight text-arcade-gold drop-shadow-[0_8px_30px_rgba(234,179,8,0.5)] arcade-skew uppercase text-center mt-2">
-              AIP ULTIMATE FIGHTER
+          <div className="relative z-10 flex w-full max-w-lg flex-col items-center px-6">
+            <p className="mb-3 text-[10px] font-bold tracking-[0.35em] text-[#6b6b7b] uppercase">
+              Aros IT-Partner
+            </p>
+            <h1 className="font-fighter text-fighter-title text-center text-6xl sm:text-7xl leading-none">
+              AIP ULTIMATE
+              <br />
+              FIGHTER
             </h1>
-            <div className="flex items-center gap-3 mt-2 text-xs font-black tracking-widest text-cyan-400 uppercase drop-shadow arcade-skew">
-              <span>★</span>
-              <span>8 KÄMPAR</span>
-              <span>•</span>
-              <span>4 ARENOR</span>
-              <span>•</span>
-              <span>60 HZ ROLLBACK-GRADE</span>
-              <span>★</span>
+            <p className="mt-3 mb-10 text-center text-[11px] font-semibold tracking-[0.25em] text-[#6b6b7b] uppercase">
+              2.5D Arcade · Training Build
+            </p>
+
+            <div className="flex w-full flex-col gap-1.5 border border-[#2a2a35] bg-[#0c0c12]/95 p-2 shadow-[0_20px_60px_rgba(0,0,0,0.65)]">
+              {/* Disabled modes */}
+              {(
+                [
+                  ["VERSUS", "Local 2-player"],
+                  ["ARCADE", "Vs CPU"],
+                  ["ONLINE", "Network match"],
+                  ["LAB", "Models & frames"],
+                ] as const
+              ).map(([label, sub]) => (
+                <div
+                  key={label}
+                  aria-disabled="true"
+                  className="flex cursor-not-allowed items-center justify-between border border-transparent px-4 py-3 opacity-35 grayscale"
+                >
+                  <div>
+                    <div className="font-fighter text-xl text-[#9a9aaa] tracking-wide">{label}</div>
+                    <div className="text-[10px] font-semibold uppercase tracking-widest text-[#5a5a68]">
+                      {sub} · Coming soon
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold text-[#5a5a68]">LOCKED</span>
+                </div>
+              ))}
+
+              {/* Only live mode */}
+              <button
+                onClick={() => {
+                  sound.playRoundStart();
+                  setPendingMode("training");
+                  setScreen("character_select");
+                }}
+                onMouseEnter={() => sound.playUiClick()}
+                className="group flex items-center justify-between border border-[#e11d48]/60 bg-gradient-to-r from-[#9f1239]/40 via-[#1a0a10] to-[#9f1239]/25 px-4 py-3.5 text-left transition hover:border-[#fb7185] hover:from-[#e11d48]/35 active:scale-[0.99]"
+              >
+                <div>
+                  <div className="font-fighter text-2xl tracking-wide text-white group-hover:text-[#fecdd3]">
+                    TRAINING
+                  </div>
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-[#fb7185]/90">
+                    Hitboxes · Dummies · Rig tools
+                  </div>
+                </div>
+                <span className="font-fighter text-2xl text-[#fb7185] transition group-hover:translate-x-0.5">
+                  ▶
+                </span>
+              </button>
             </div>
-          </div>
-
-          {/* Arcade Menu Buttons */}
-          <div className="relative z-10 flex flex-col gap-2.5 w-96 max-w-full">
-            <button
-              onClick={() => {
-                sound.playRoundStart();
-                setPendingMode("local");
-                setScreen("character_select");
-              }}
-              onMouseEnter={() => sound.playUiClick()}
-              className="group relative flex items-center justify-between rounded-lg border-2 border-blue-500/80 bg-gradient-to-r from-blue-950 via-slate-900 to-blue-950 px-6 py-3 shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:border-blue-400 hover:shadow-[0_0_30px_rgba(59,130,246,0.7)] hover:scale-[1.02] active:scale-95 transition duration-150 text-left arcade-skew"
-            >
-              <div className="arcade-skew-reverse flex flex-col">
-                <span className="font-arcade text-lg tracking-wider text-white group-hover:text-cyan-300">
-                  LOKAL 2-SPELARE
-                </span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  [1V1 VERSUS BATTLE]
-                </span>
-              </div>
-              <span className="font-arcade text-xl text-blue-400 group-hover:translate-x-1 transition">►</span>
-            </button>
-
-            <button
-              onClick={() => {
-                sound.playRoundStart();
-                setPendingMode("cpu");
-                setScreen("character_select");
-              }}
-              onMouseEnter={() => sound.playUiClick()}
-              className="group relative flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/80 px-6 py-3 shadow hover:border-amber-400 hover:shadow-[0_0_25px_rgba(251,191,36,0.4)] hover:scale-[1.02] active:scale-95 transition duration-150 text-left arcade-skew"
-            >
-              <div className="arcade-skew-reverse flex flex-col">
-                <span className="font-arcade text-lg tracking-wider text-white group-hover:text-amber-300">
-                  SPELA MOT DATORN (AI)
-                </span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  [SINGLE PLAYER ARCADE]
-                </span>
-              </div>
-              <span className="font-arcade text-xl text-amber-400 group-hover:translate-x-1 transition">►</span>
-            </button>
-
-            <button
-              onClick={handleConnectOnline}
-              onMouseEnter={() => sound.playUiClick()}
-              className="group relative flex items-center justify-between rounded-lg border-2 border-emerald-500/80 bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 px-6 py-3 shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:border-emerald-400 hover:shadow-[0_0_30px_rgba(16,185,129,0.7)] hover:scale-[1.02] active:scale-95 transition duration-150 text-left arcade-skew"
-            >
-              <div className="arcade-skew-reverse flex flex-col">
-                <span className="font-arcade text-lg tracking-wider text-white group-hover:text-emerald-300">
-                  ONLINE 1V1 (SERVER)
-                </span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  [COLYSEUS MULTIPLAYER LOBBY]
-                </span>
-              </div>
-              <span className="font-arcade text-xl text-emerald-400 group-hover:translate-x-1 transition">►</span>
-            </button>
-
-            <button
-              onClick={() => {
-                sound.playRoundStart();
-                setPendingMode("training");
-                setScreen("character_select");
-              }}
-              onMouseEnter={() => sound.playUiClick()}
-              className="group relative flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/80 px-6 py-3 shadow hover:border-purple-400 hover:shadow-[0_0_25px_rgba(168,85,247,0.4)] hover:scale-[1.02] active:scale-95 transition duration-150 text-left arcade-skew"
-            >
-              <div className="arcade-skew-reverse flex flex-col">
-                <span className="font-arcade text-lg tracking-wider text-white group-hover:text-purple-300">
-                  TRÄNINGSLÄGE
-                </span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  [DOJO & HITBOX-ANALYS]
-                </span>
-              </div>
-              <span className="font-arcade text-xl text-purple-400 group-hover:translate-x-1 transition">►</span>
-            </button>
-
-            <button
-              onClick={() => {
-                sound.playUiClick();
-                setScreen("character_lab");
-              }}
-              onMouseEnter={() => sound.playUiClick()}
-              className="group relative flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/80 px-6 py-2.5 shadow hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:scale-[1.02] active:scale-95 transition duration-150 text-left arcade-skew"
-            >
-              <div className="arcade-skew-reverse flex flex-col">
-                <span className="font-arcade text-base tracking-wider text-slate-200 group-hover:text-cyan-300">
-                  CHARACTER LAB & FRAMES
-                </span>
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                  [3D MODELLER & GLB UPLOAD]
-                </span>
-              </div>
-              <span className="font-arcade text-lg text-cyan-400 group-hover:translate-x-1 transition">►</span>
-            </button>
 
             <button
               onClick={() => {
                 sound.playUiClick();
                 setIsSettingsOpen(true);
               }}
-              onMouseEnter={() => sound.playUiClick()}
-              className="mt-1 w-full rounded border border-slate-800 bg-slate-950/80 py-2 text-xs font-bold text-slate-400 hover:text-white hover:border-slate-700 transition"
+              className="mt-5 text-[11px] font-bold uppercase tracking-[0.2em] text-[#6b6b7b] transition hover:text-[#c4c4d0]"
             >
-              ⚙ Inställningar & Kontroller
+              Controls
             </button>
+
+            {isSharePoint && (
+              <p className="mt-4 text-[10px] font-bold uppercase tracking-widest text-emerald-500/80">
+                SharePoint embed
+              </p>
+            )}
           </div>
 
-          <div className="absolute bottom-3 text-[10px] font-mono tracking-widest text-slate-600 uppercase">
-            Aros IT-Partner Ultimate Fighter • Tournament Ready
-          </div>
+          <p className="absolute bottom-4 text-[10px] font-mono tracking-widest text-[#3a3a48] uppercase">
+            Press Training to start
+          </p>
         </div>
       )}
 
@@ -385,8 +331,8 @@ export const App: React.FC = () => {
         <>
           <HUD
             state={hudState}
-            p1Name={screen === "online_match" ? roomState?.p1.displayName ?? "Spelare 1" : "Spelare 1"}
-            p2Name={screen === "online_match" ? roomState?.p2.displayName ?? "Spelare 2" : pendingMode === "cpu" ? "Dator (CPU)" : "Spelare 2"}
+            p1Name={screen === "online_match" ? roomState?.p1.displayName ?? "Player 1" : "Player 1"}
+            p2Name={screen === "online_match" ? roomState?.p2.displayName ?? "Player 2" : pendingMode === "cpu" ? "CPU" : "Player 2"}
             p1Char={p1Char}
             p2Char={p2Char}
           />
@@ -413,7 +359,7 @@ export const App: React.FC = () => {
             }}
             className="absolute bottom-4 right-4 z-20 rounded-lg border border-slate-700/80 bg-slate-900/90 px-3.5 py-1.5 text-xs font-bold text-slate-300 hover:bg-slate-800 hover:text-white transition shadow-lg backdrop-blur"
           >
-            Avsluta Match
+            Exit match
           </button>
         </>
       )}

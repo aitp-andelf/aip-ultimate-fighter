@@ -284,7 +284,7 @@ export const CharacterLabScreen: React.FC<CharacterLabScreenProps> = ({ onBack }
         {/* Character Selector sidebar */}
         <div className="col-span-3 flex flex-col rounded-2xl border border-slate-800 bg-slate-900/50 p-4 space-y-2 overflow-y-auto shadow-lg backdrop-blur">
           <h3 className="text-xs font-black tracking-widest text-slate-400 uppercase mb-2">
-            Välj Kämpe att Inspektera
+            Inspect fighter
           </h3>
           {CHARACTER_LIST.map((c) => (
             <button
@@ -330,7 +330,7 @@ export const CharacterLabScreen: React.FC<CharacterLabScreenProps> = ({ onBack }
 
               {modelStats && (
                 <div className="absolute bottom-2.5 left-3 flex items-center gap-3 bg-slate-950/80 px-3 py-1 rounded-md border border-slate-800 text-[10px] font-mono text-slate-400">
-                  <span>Höjd: <strong className="text-white">{modelStats.height}m</strong></span>
+                  <span>Height: <strong className="text-white">{modelStats.height}m</strong></span>
                   <span>Meshar: <strong className="text-white">{modelStats.meshes}</strong></span>
                   <span>Bones: <strong className="text-white">{modelStats.bones}</strong></span>
                 </div>
@@ -371,7 +371,7 @@ export const CharacterLabScreen: React.FC<CharacterLabScreenProps> = ({ onBack }
                 </div>
                 <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
                   {availableAnims.length === 0 ? (
-                    <span className="text-xs text-slate-500 italic">Inga inbäddade animeringar hittades</span>
+                    <span className="text-xs text-slate-500 italic">No embedded animations found</span>
                   ) : (
                     availableAnims.map((anim) => (
                       <button
@@ -395,7 +395,7 @@ export const CharacterLabScreen: React.FC<CharacterLabScreenProps> = ({ onBack }
           {/* Bottom Section: Moves / Framedata Table */}
           <div className="flex-1">
             <h3 className="text-xs font-black tracking-widest text-slate-400 uppercase mb-2.5">
-              Moveset & Framedata för {char.name}
+              Moveset & framedata · {char.name}
             </h3>
             <div className="overflow-x-auto rounded-xl border border-slate-800 shadow-inner">
               <table className="w-full text-left text-xs text-slate-200">

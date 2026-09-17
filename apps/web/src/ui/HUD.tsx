@@ -13,8 +13,8 @@ interface HudProps {
 
 export const HUD: React.FC<HudProps> = ({
   state,
-  p1Name = "Spelare 1",
-  p2Name = "Spelare 2",
+  p1Name = "Player 1",
+  p2Name = "Player 2",
   p1Char,
   p2Char,
 }) => {
@@ -64,7 +64,7 @@ export const HUD: React.FC<HudProps> = ({
     if (round.roundResult === "p1") bannerText = `${p1Name.toUpperCase()} VINNER!`;
     else if (round.roundResult === "p2") bannerText = `${p2Name.toUpperCase()} VINNER!`;
     else if (round.roundResult === "double_ko") bannerText = "DUBBEL KO!";
-    else bannerText = "TIDEN ÄR UTE!";
+    else bannerText = "TIME UP!";
   } else if (round.phase === "match_end") {
     if (round.result === "p1") bannerText = `${p1Name.toUpperCase()} TAR MATCHEN!`;
     else if (round.result === "p2") bannerText = `${p2Name.toUpperCase()} TAR MATCHEN!`;
@@ -138,7 +138,7 @@ export const HUD: React.FC<HudProps> = ({
             </span>
           </div>
           <span className="mt-1 text-[10px] font-black tracking-widest text-slate-300 uppercase drop-shadow">
-            {state.training ? "Träning" : `Rond ${round.roundsPlayed + 1}`}
+            {state.training ? "Training" : `Round ${round.roundsPlayed + 1}`}
           </span>
         </div>
 
@@ -202,7 +202,7 @@ export const HUD: React.FC<HudProps> = ({
       {f1.comboHits > 1 && (
         <div className="absolute left-10 top-32 animate-bounce rounded-xl bg-gradient-to-r from-red-950/90 to-slate-950/90 px-5 py-3 border-2 border-red-500 text-white shadow-[0_0_25px_rgba(239,68,68,0.5)] backdrop-blur">
           <div className="text-3xl font-black tracking-wider text-yellow-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-            {f1.comboHits} TRÄFFAR
+            {f1.comboHits} HITS
           </div>
           <div className="text-xs font-bold tracking-widest text-red-300 uppercase">
             {f1.comboDamage} SKADA
@@ -212,7 +212,7 @@ export const HUD: React.FC<HudProps> = ({
       {f0.comboHits > 1 && (
         <div className="absolute right-10 top-32 animate-bounce rounded-xl bg-gradient-to-l from-blue-950/90 to-slate-950/90 px-5 py-3 border-2 border-blue-500 text-white shadow-[0_0_25px_rgba(59,130,246,0.5)] backdrop-blur text-right">
           <div className="text-3xl font-black tracking-wider text-yellow-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-            {f0.comboHits} TRÄFFAR
+            {f0.comboHits} HITS
           </div>
           <div className="text-xs font-bold tracking-widest text-blue-300 uppercase">
             {f0.comboDamage} SKADA

@@ -46,7 +46,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         </div>
 
         <div className="flex items-center gap-4 text-xs font-semibold text-slate-400">
-          <span>Åskådare: <strong className="text-white">{roomState?.spectatorCount ?? 0}</strong></span>
+          <span>Spectators: <strong className="text-white">{roomState?.spectatorCount ?? 0}</strong></span>
           <span>Bana: <strong className="text-cyan-400 uppercase">{roomState?.stageId ?? "serverrum"}</strong></span>
         </div>
       </div>
@@ -61,7 +61,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             </span>
             {p1?.sessionId && (
               <span className={`text-xs font-bold ${p1.ready ? "text-emerald-400" : "text-yellow-400"}`}>
-                {p1.ready ? "REDO!" : "VÄLJER..."}
+                {p1.ready ? "READY!" : "SELECTING..."}
               </span>
             )}
           </div>
@@ -71,14 +71,14 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               <div>
                 <h2 className="text-2xl font-black text-white">{p1.displayName}</h2>
                 <div className="mt-2 text-sm text-blue-300">
-                  Vald kämpe: <strong className="text-white uppercase">{p1.characterId ?? "Ingen"}</strong>
+                  Fighter: <strong className="text-white uppercase">{p1.characterId ?? "None"}</strong>
                 </div>
               </div>
 
               {isP1 && (
                 <div className="space-y-4">
                   <div>
-                    <label className="text-xs font-bold text-slate-400 uppercase">Välj din kämpe:</label>
+                    <label className="text-xs font-bold text-slate-400 uppercase">Choose fighter:</label>
                     <select
                       value={p1.characterId ?? "shoto-a"}
                       onChange={(e) => {
@@ -107,7 +107,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                           : "bg-emerald-500 text-white hover:bg-emerald-400"
                       }`}
                     >
-                      {p1.ready ? "AVBRYT REDO" : "JAG ÄR REDO!"}
+                      {p1.ready ? "CANCEL READY" : "JAG ÄR READY!"}
                     </button>
                     <button
                       onClick={() => {
@@ -116,7 +116,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                       }}
                       className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-700"
                     >
-                      Lämna plats
+                      Leave slot
                     </button>
                   </div>
                 </div>
@@ -124,7 +124,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             </div>
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center">
-              <span className="text-sm font-semibold text-slate-500">Platsen är ledig</span>
+              <span className="text-sm font-semibold text-slate-500">Slot open</span>
               {!mySlot && (
                 <button
                   onClick={() => { sound.playUiClick(); onClaimSlot("p1"); }}
@@ -140,12 +140,12 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         {/* Center Queue / Status */}
         <div className="col-span-2 flex flex-col items-center justify-start rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
           <h3 className="text-xs font-black tracking-widest text-slate-400 uppercase">
-            Spelarkö ({queue.length})
+            Queue ({queue.length})
           </h3>
 
           <div className="mt-4 w-full flex-1 space-y-2 overflow-y-auto">
             {queue.length === 0 ? (
-              <span className="text-center block text-xs text-slate-600 mt-6">Kön är tom</span>
+              <span className="text-center block text-xs text-slate-600 mt-6">Queue empty</span>
             ) : (
               queue.map((q, idx) => (
                 <div
@@ -167,7 +167,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             </span>
             {p2?.sessionId && (
               <span className={`text-xs font-bold ${p2.ready ? "text-emerald-400" : "text-yellow-400"}`}>
-                {p2.ready ? "REDO!" : "VÄLJER..."}
+                {p2.ready ? "READY!" : "SELECTING..."}
               </span>
             )}
           </div>
@@ -177,14 +177,14 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               <div>
                 <h2 className="text-2xl font-black text-white">{p2.displayName}</h2>
                 <div className="mt-2 text-sm text-rose-300">
-                  Vald kämpe: <strong className="text-white uppercase">{p2.characterId ?? "Ingen"}</strong>
+                  Fighter: <strong className="text-white uppercase">{p2.characterId ?? "None"}</strong>
                 </div>
               </div>
 
               {isP2 && (
                 <div className="space-y-4">
                   <div>
-                    <label className="text-xs font-bold text-slate-400 uppercase block text-left">Välj din kämpe:</label>
+                    <label className="text-xs font-bold text-slate-400 uppercase block text-left">Choose fighter:</label>
                     <select
                       value={p2.characterId ?? "shoto-a"}
                       onChange={(e) => {
@@ -209,7 +209,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                       }}
                       className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-700"
                     >
-                      Lämna plats
+                      Leave slot
                     </button>
                     <button
                       onClick={() => {
@@ -222,7 +222,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                           : "bg-emerald-500 text-white hover:bg-emerald-400"
                       }`}
                     >
-                      {p2.ready ? "AVBRYT REDO" : "JAG ÄR REDO!"}
+                      {p2.ready ? "CANCEL READY" : "JAG ÄR READY!"}
                     </button>
                   </div>
                 </div>
@@ -230,7 +230,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             </div>
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center">
-              <span className="text-sm font-semibold text-slate-500">Platsen är ledig</span>
+              <span className="text-sm font-semibold text-slate-500">Slot open</span>
               {!mySlot && (
                 <button
                   onClick={() => { sound.playUiClick(); onClaimSlot("p2"); }}
