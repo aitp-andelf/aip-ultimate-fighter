@@ -106,6 +106,11 @@ export const App: React.FC = () => {
     }
   }, [screen]);
 
+  useEffect(() => {
+    if (screen !== "online_match" || !rendererRef.current) return;
+    rendererRef.current.setupFighterModels(p1Char, p2Char);
+  }, [screen, p1Char, p2Char]);
+
   // Handle Local / Training match start
   const handleStartLocalMatch = (
     c1: CharacterDef,

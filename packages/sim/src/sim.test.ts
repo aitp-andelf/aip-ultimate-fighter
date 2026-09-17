@@ -3,7 +3,12 @@ import { Buttons } from "@aipuf/contracts";
 import { SHOTO_A, ZONER_A } from "@aipuf/content";
 import {
   createInitialMatchState,
+  getHitboxes,
+  getHurtboxes,
+  getLocalHurtboxes,
+  getLocalPushbox,
   hashState,
+  overlaps,
   simStep,
 } from "./index.ts";
 
@@ -196,5 +201,46 @@ describe("packages/sim", () => {
     // Neither player took damage
     expect(state.fighters[0].health).toBe(1000);
     expect(state.fighters[1].health).toBe(1000);
+  });
+
+  it("keeps facing the opponent while walking backward", () => {
+    const state = createInitialMatchState({ p1: SHOTO_A, p2: ZONER_A });
+    state.round.phase = "fighting";
+
+    for (let i = 0; i < 12; i++) {
+      simStep(state, [{ bits: Buttons.LEFT }, { bits: 0 }]);
+    }
+
+    expect(state.fighters[0].state).toBe("walkBackward");
+    expect(state.fighters[0].facing).toBe(1);
+    expect(state.fighters[0].x).toBeLessThan(-350);
+    expect(state.fighters[1].facing).toBe(-1);
+  });
+
+  it("uses squat hurtboxes that duck under standing HIGH and still eat MIDs", () => {
+    const state = createInitialMatchState({ p1: SHOTO_A, p2: ZONER_A });
+    state.round.phase = "fighting";
+    state.fighters[0].x = 0;
+    state.fighters[1].x = 90;
+    state.fighters[1].state = "crouch";
+
+    state.fighters[0].state = "attackActive";
+    state.fighters[0].moveId = "hp";
+    const highHits = getHitboxes(state.fighters[0], SHOTO_A);
+    const crouchHurt = getHurtboxes(state.fighters[1], ZONER_A);
+    expect(highHits.some((h) => crouchHurt.some((b) => overlaps(h, b)))).toBe(false);
+
+    state.fighters[0].moveId = "lp";
+    const midHits = getHitboxes(state.fighters[0], SHOTO_A);
+    expect(midHits.some((h) => crouchHurt.some((b) => overlaps(h, b)))).toBe(true);
+  });
+
+  it("keeps crouch hurt and push while a low-pose attack is active", () => {
+    const state = createInitialMatchState({ p1: SHOTO_A, p2: ZONER_A });
+    state.fighters[0].state = "attackActive";
+    state.fighters[0].moveId = "clp";
+
+    expect(getLocalHurtboxes(state.fighters[0], SHOTO_A)).toEqual(SHOTO_A.hurtCrouch);
+    expect(getLocalPushbox(state.fighters[0], SHOTO_A).h).toBeLessThan(SHOTO_A.pushbox.h);
   });
 });

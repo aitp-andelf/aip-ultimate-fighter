@@ -35,12 +35,35 @@ describe("packages/content", () => {
       const superMove = moves[normals.super]!;
       expect(superMove.meterCost).toBe(SUPER_COST);
 
+      expect(
+        Object.values(moves).every((m) => !m.projectile),
+        `${char.id} must not fire a powerblast projectile`
+      ).toBe(true);
+
+      expect(moves.clp, `${char.id} missing crouch jab`).toBeDefined();
+      expect(moves.clk, `${char.id} missing crouch kick`).toBeDefined();
+      expect(moves.air_punch, `${char.id} missing jump punch`).toBeDefined();
+
       // Check pushbox and hurtboxes
       expect(char.pushbox.w).toBeGreaterThan(0);
       expect(char.pushbox.h).toBeGreaterThan(0);
       expect(char.hurtStand.length).toBeGreaterThan(0);
       expect(char.hurtCrouch.length).toBeGreaterThan(0);
       expect(char.hurtAir.length).toBeGreaterThan(0);
+
+      const crouchTop = Math.max(...char.hurtCrouch.map((b) => b.y + b.h));
+      const standTop = Math.max(...char.hurtStand.map((b) => b.y + b.h));
+      expect(crouchTop, `${char.id} crouch hurt should be shorter than stand`).toBeLessThan(standTop);
+
+      const hp = moves[normals.hp]!;
+      if (hp.category === "HIGH") {
+        for (const box of hp.hitboxes) {
+          expect(box.y, `${char.id} HIGH must sit above a squat`).toBeGreaterThanOrEqual(crouchTop);
+        }
+      }
+      const clp = moves.clp!;
+      expect(clp.lowPose).toBe(true);
+      expect(clp.hitboxes[0]!.y + clp.hitboxes[0]!.h).toBeLessThan(standTop);
     }
   });
 

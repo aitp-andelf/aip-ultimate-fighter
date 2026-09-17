@@ -89,7 +89,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     >
                       {CHARACTER_LIST.map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.name} ({c.archetype})
+                          {c.name}
                         </option>
                       ))}
                     </select>
@@ -195,7 +195,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     >
                       {CHARACTER_LIST.map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.name} ({c.archetype})
+                          {c.name}
                         </option>
                       ))}
                     </select>

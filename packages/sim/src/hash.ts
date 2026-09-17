@@ -29,8 +29,8 @@ export function canonicalStateString(state: MatchState): string {
   return [
     `t:${state.tick}`,
     `rng:${state.rng}`,
-    `f0:${f0.x},${f0.y},${f0.vx},${f0.vy},${f0.facing},${f0.state},${f0.stateTime},${f0.health},${f0.meter},${f0.moveId ?? ""},${f0.attackAge},${f0.hitstun},${f0.blockstun},${f0.hitstop}`,
-    `f1:${f1.x},${f1.y},${f1.vx},${f1.vy},${f1.facing},${f1.state},${f1.stateTime},${f1.health},${f1.meter},${f1.moveId ?? ""},${f1.attackAge},${f1.hitstun},${f1.blockstun},${f1.hitstop}`,
+    `f0:${f0.x},${f0.y},${f0.vx},${f0.vy},${f0.facing},${f0.state},${f0.stateTime},${f0.health},${f0.meter},${f0.moveId ?? ""},${f0.attackAge},${f0.hitstun},${f0.blockstun},${f0.hitstop},${f0.dashLeft}`,
+    `f1:${f1.x},${f1.y},${f1.vx},${f1.vy},${f1.facing},${f1.state},${f1.stateTime},${f1.health},${f1.meter},${f1.moveId ?? ""},${f1.attackAge},${f1.hitstun},${f1.blockstun},${f1.hitstop},${f1.dashLeft}`,
     `p:[${projs}]`,
     `r:${rnd.phase},${rnd.timer},${rnd.wins[0]},${rnd.wins[1]},${rnd.roundsPlayed},${rnd.countdown}`,
   ].join("|");

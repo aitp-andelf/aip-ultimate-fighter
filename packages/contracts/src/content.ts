@@ -11,6 +11,7 @@ export type FighterStateId =
   | "idle"
   | "walkForward"
   | "walkBackward"
+  | "dash"
   | "crouch"
   | "jumpStartup"
   | "jump"
@@ -63,6 +64,8 @@ export interface MoveDef {
   invulnEnd?: number;
   armorHits?: number;
   commandGrab?: boolean;
+  /** Forward subunits applied each tick during startup+active. */
+  advance?: number;
   projectile?: ProjectileDef;
   zone?: ZoneDef;
   allowed: FighterStateId[];
@@ -111,6 +114,7 @@ export interface CharacterDef {
   punish: string;
   walkSpeed: number;
   backWalkSpeed: number;
+  dashSpeed?: number;
   jumpVy: number;
   jumpStartup: number;
   landRecovery: number;
@@ -137,6 +141,7 @@ export interface CharacterDef {
   animationProfileId: string;
   colors: [string, string];
   modelUrl?: string;
+  portraitUrl?: string;
   tagline?: string;
   power?: number; // 1 to 10
   speed?: number; // 1 to 10

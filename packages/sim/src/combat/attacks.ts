@@ -14,6 +14,7 @@ export function startMove(
   fighter.windowHits = 0;
   fighter.lastConnect = null;
   fighter.armorLeft = move.armorHits ?? 0;
+  fighter.vx = move.advance ? fighter.facing * move.advance : 0;
 
   if (move.meterCost > 0) {
     fighter.meter = Math.max(0, fighter.meter - move.meterCost);
@@ -41,6 +42,12 @@ export function updateAttackProgress(
   }
 
   fighter.attackAge++;
+
+  if (move.advance && fighter.attackAge <= move.startup + move.active) {
+    fighter.vx = fighter.facing * move.advance;
+  } else if (!fighter.airborne && fighter.y <= 0) {
+    fighter.vx = 0;
+  }
 
   const startupEnd = move.startup;
   const activeEnd = move.startup + move.active;

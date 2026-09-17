@@ -3,6 +3,25 @@ import type { Aabb, CharacterDef } from "@aipuf/contracts";
 import { overlaps, worldBox } from "../aabb.ts";
 import type { FighterRuntime } from "../types.ts";
 
+export function isCrouchHurtPose(fighter: FighterRuntime, char: CharacterDef): boolean {
+  if (fighter.y > 0 || fighter.airborne || fighter.state === "jump" || fighter.state === "fall") {
+    return false;
+  }
+  if (fighter.state === "crouch" || fighter.state === "crouchBlock") return true;
+  if (!fighter.moveId) return false;
+  const move = char.moves[fighter.moveId];
+  return Boolean(move?.lowPose && fighter.state.startsWith("attack"));
+}
+
+export function getLocalPushbox(fighter: FighterRuntime, char: CharacterDef): Aabb {
+  if (!isCrouchHurtPose(fighter, char)) return char.pushbox;
+  return { ...char.pushbox, h: Math.round(char.pushbox.h * 0.58) };
+}
+
+export function getPushbox(fighter: FighterRuntime, char: CharacterDef): Aabb {
+  return worldBox(getLocalPushbox(fighter, char), fighter.x, fighter.y, fighter.facing);
+}
+
 export function resolvePushboxes(
   f0: FighterRuntime,
   f1: FighterRuntime,
@@ -11,8 +30,8 @@ export function resolvePushboxes(
   leftBound: number,
   rightBound: number
 ): void {
-  const pbox0 = worldBox(char0.pushbox, f0.x, f0.y, f0.facing);
-  const pbox1 = worldBox(char1.pushbox, f1.x, f1.y, f1.facing);
+  const pbox0 = getPushbox(f0, char0);
+  const pbox1 = getPushbox(f1, char1);
 
   if (overlaps(pbox0, pbox1)) {
     let overlap: number;
@@ -101,18 +120,16 @@ function isStateTurnable(state: FighterRuntime["state"]): boolean {
   );
 }
 
-export function getHurtboxes(fighter: FighterRuntime, char: CharacterDef): Aabb[] {
-  let localBoxes: Aabb[];
-
+export function getLocalHurtboxes(fighter: FighterRuntime, char: CharacterDef): Aabb[] {
   if (fighter.y > 0 || fighter.airborne || fighter.state === "jump" || fighter.state === "fall") {
-    localBoxes = char.hurtAir;
-  } else if (fighter.state === "crouch" || fighter.state === "crouchBlock") {
-    localBoxes = char.hurtCrouch;
-  } else {
-    localBoxes = char.hurtStand;
+    return char.hurtAir;
   }
+  if (isCrouchHurtPose(fighter, char)) return char.hurtCrouch;
+  return char.hurtStand;
+}
 
-  return localBoxes.map((b) => worldBox(b, fighter.x, fighter.y, fighter.facing));
+export function getHurtboxes(fighter: FighterRuntime, char: CharacterDef): Aabb[] {
+  return getLocalHurtboxes(fighter, char).map((b) => worldBox(b, fighter.x, fighter.y, fighter.facing));
 }
 
 export function getHitboxes(fighter: FighterRuntime, char: CharacterDef): Aabb[] {

@@ -144,12 +144,19 @@ export const CharacterLabScreen: React.FC<CharacterLabScreenProps> = ({ onBack }
       if (child.isMesh) {
         meshCount++;
         if (child.material) {
-          child.material = child.material.clone();
-          const name = (child.material.name || "").toLowerCase();
-          if (name.includes("main") || name.includes("highlimbs") || !name) {
-            child.material.color = pColor;
-          } else if (name.includes("grey") || name.includes("joints")) {
-            child.material.color = sColor;
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          child.material = Array.isArray(child.material)
+            ? mats.map((m: any) => m.clone())
+            : mats[0].clone();
+          const cloned = Array.isArray(child.material) ? child.material : [child.material];
+          for (const mat of cloned) {
+            if (mat.map) continue;
+            const name = (mat.name || "").toLowerCase();
+            if (name.includes("main") || name.includes("highlimbs") || !name) {
+              mat.color = pColor;
+            } else if (name.includes("grey") || name.includes("joints")) {
+              mat.color = sColor;
+            }
           }
         }
       }
@@ -301,7 +308,7 @@ export const CharacterLabScreen: React.FC<CharacterLabScreenProps> = ({ onBack }
               </div>
               <div className="flex-1">
                 <div className="font-black text-sm text-white">{c.name}</div>
-                <div className="text-[10px] font-bold text-slate-400 uppercase">{c.archetype}</div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase truncate">{c.tagline ?? c.name}</div>
               </div>
             </button>
           ))}
@@ -336,7 +343,7 @@ export const CharacterLabScreen: React.FC<CharacterLabScreenProps> = ({ onBack }
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-black text-white">{char.name}</h2>
                   <span className="rounded bg-blue-600/80 px-2 py-0.5 text-[10px] font-black uppercase text-blue-100">
-                    {char.archetype}
+                    {char.tagline ?? char.name}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-slate-300 leading-relaxed">{char.blurb}</p>

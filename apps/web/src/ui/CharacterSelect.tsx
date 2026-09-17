@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { CHARACTER_LIST, STAGE_LIST, getStage } from "@aipuf/content";
 import type { CharacterDef, CharacterId, StageDef } from "@aipuf/contracts";
 import { sound } from "../audio/sound.ts";
+import { FighterPortrait } from "./FighterPortrait.tsx";
 
 interface CharacterSelectProps {
   onSelect: (
@@ -45,20 +46,6 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
   const handleStart = () => {
     sound.playRoundStart();
     onSelect(p1Char, p2Char, p1Palette, p2Palette, stage);
-  };
-
-  const getArchetypeBadgeColor = (archetype: string) => {
-    if (archetype.startsWith("grappler")) return "bg-red-600/80 text-red-100 border-red-500/60";
-    if (archetype.startsWith("shoto")) return "bg-blue-600/80 text-blue-100 border-blue-500/60";
-    if (archetype.startsWith("zoner")) return "bg-emerald-600/80 text-emerald-100 border-emerald-500/60";
-    return "bg-purple-600/80 text-purple-100 border-purple-500/60";
-  };
-
-  const getArchetypeBorder = (archetype: string) => {
-    if (archetype.startsWith("grappler")) return "border-red-600/50 hover:border-red-400";
-    if (archetype.startsWith("shoto")) return "border-blue-600/50 hover:border-blue-400";
-    if (archetype.startsWith("zoner")) return "border-emerald-600/50 hover:border-emerald-400";
-    return "border-purple-600/50 hover:border-purple-400";
   };
 
   const renderStatBar = (label: string, val: number = 5, color: string = "bg-amber-400") => {
@@ -140,15 +127,14 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
                 className="absolute inset-0 opacity-20"
                 style={{ backgroundColor: p1Char.colors[0] }}
               />
-              <span className="font-arcade text-5xl font-black text-blue-300/40 drop-shadow">
-                {p1Char.name.charAt(0)}
-              </span>
+              <FighterPortrait
+                char={p1Char}
+                className="absolute inset-0"
+                imgClassName="h-full w-full object-cover object-[center_18%] opacity-90"
+              />
               <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between">
                 <span className="font-arcade text-xl font-black text-white drop-shadow">
                   {p1Char.name}
-                </span>
-                <span className={`rounded border px-2 py-0.5 text-[9px] font-black uppercase ${getArchetypeBadgeColor(p1Char.archetype)}`}>
-                  {p1Char.archetype.split("-")[0]}
                 </span>
               </div>
             </div>
@@ -217,15 +203,19 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
                       ? "border-blue-400 bg-blue-950/80 shadow-[0_0_25px_rgba(59,130,246,0.6)] ring-2 ring-blue-400"
                       : isP2
                       ? "border-rose-400 bg-rose-950/80 shadow-[0_0_25px_rgba(244,63,94,0.6)] ring-2 ring-rose-400"
-                      : `bg-slate-900/70 ${getArchetypeBorder(char.archetype)}`
+                      : "bg-slate-900/70 border-slate-600/50 hover:border-amber-400"
                   }`}
                 >
                   {/* Portrait Avatar Circle */}
                   <div
-                    className="relative flex h-14 w-14 items-center justify-center rounded-xl border-2 border-white/20 text-xl font-black text-white shadow-md group-hover:scale-110 transition duration-150"
+                    className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border-2 border-white/20 text-xl font-black text-white shadow-md group-hover:scale-110 transition duration-150"
                     style={{ backgroundColor: char.colors[0] }}
                   >
-                    <span className="drop-shadow">{char.name[0]}</span>
+                    <FighterPortrait
+                      char={char}
+                      className="absolute inset-0"
+                      imgClassName="h-full w-full object-cover object-[center_12%]"
+                    />
                   </div>
 
                   {/* Name & Archetype */}
@@ -233,8 +223,8 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
                     <div className="font-arcade text-xs font-black tracking-wide text-white truncate group-hover:text-amber-300">
                       {char.name}
                     </div>
-                    <div className="text-[9px] font-black uppercase text-slate-400 tracking-wider">
-                      {char.archetype.split("-")[0]}
+                    <div className="text-[9px] font-black uppercase text-slate-400 tracking-wider truncate">
+                      {char.tagline ?? ""}
                     </div>
                   </div>
 
@@ -321,15 +311,14 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
                 className="absolute inset-0 opacity-20"
                 style={{ backgroundColor: p2Char.colors[0] }}
               />
-              <span className="font-arcade text-5xl font-black text-rose-300/40 drop-shadow">
-                {p2Char.name.charAt(0)}
-              </span>
+              <FighterPortrait
+                char={p2Char}
+                className="absolute inset-0"
+                imgClassName="h-full w-full object-cover object-[center_18%] opacity-90"
+              />
               <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between flex-row-reverse">
                 <span className="font-arcade text-xl font-black text-white drop-shadow">
                   {p2Char.name}
-                </span>
-                <span className={`rounded border px-2 py-0.5 text-[9px] font-black uppercase ${getArchetypeBadgeColor(p2Char.archetype)}`}>
-                  {p2Char.archetype.split("-")[0]}
                 </span>
               </div>
             </div>

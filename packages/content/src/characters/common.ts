@@ -1,4 +1,4 @@
-import type { Aabb } from "@aipuf/contracts";
+import type { Aabb, MoveDef } from "@aipuf/contracts";
 
 export const DEFAULT_PUSHBOX: Aabb = {
   x: -80,
@@ -8,16 +8,158 @@ export const DEFAULT_PUSHBOX: Aabb = {
 };
 
 export const DEFAULT_HURT_STAND: Aabb[] = [
-  { x: -90, y: 0, w: 180, h: 220 }, // legs/lower body
-  { x: -80, y: 220, w: 160, h: 200 }, // torso/head
+  { x: -90, y: 0, w: 180, h: 220 },
+  { x: -80, y: 220, w: 160, h: 200 },
 ];
 
+/** Visual squat is ~1.22m (hip drop + spine fold). Standing HIGH strikes sit above this. */
 export const DEFAULT_HURT_CROUCH: Aabb[] = [
-  { x: -95, y: 0, w: 190, h: 160 },
-  { x: -85, y: 160, w: 170, h: 130 },
+  { x: -95, y: 0, w: 190, h: 130 },
+  { x: -85, y: 130, w: 170, h: 115 },
 ];
 
 export const DEFAULT_HURT_AIR: Aabb[] = [
   { x: -85, y: 60, w: 170, h: 180 },
   { x: -75, y: 240, w: 150, h: 160 },
 ];
+
+const GROUND: MoveDef["allowed"] = ["idle", "walkForward", "walkBackward", "dash", "crouch"];
+
+export function airPunch(name = "Lufthook"): MoveDef {
+  return {
+    id: "air_punch",
+    name,
+    startup: 5,
+    active: 4,
+    recovery: 10,
+    damage: 55,
+    hitstun: 12,
+    blockstun: 9,
+    hitstop: 4,
+    pushback: 40,
+    knockback: 0,
+    launch: 0,
+    category: "OVERHEAD",
+    hitboxes: [{ x: 35, y: 140, w: 95, h: 70 }],
+    meterGainOnHit: 35,
+    meterGainOnBlock: 14,
+    meterCost: 0,
+    chip: 0,
+    knockdown: false,
+    allowed: ["jump", "fall"],
+    cancels: {},
+    airOk: true,
+    lowPose: false,
+    animation: "punch",
+  };
+}
+
+/** Ducking normals: jab, low kick, overhead-ish hook, sweep. */
+export function crouchKit(hitCancels: string[]): Record<string, MoveDef> {
+  return {
+    clp: {
+      id: "clp",
+      name: "Duckjab",
+      startup: 4,
+      active: 2,
+      recovery: 8,
+      damage: 28,
+      hitstun: 11,
+      blockstun: 8,
+      hitstop: 3,
+      pushback: 28,
+      knockback: 0,
+      launch: 0,
+      category: "MID",
+      hitboxes: [{ x: 40, y: 80, w: 85, h: 55 }],
+      meterGainOnHit: 22,
+      meterGainOnBlock: 10,
+      meterCost: 0,
+      chip: 0,
+      knockdown: false,
+      allowed: GROUND,
+      cancels: { hit: hitCancels },
+      airOk: false,
+      lowPose: true,
+      animation: "punch",
+    },
+    clk: {
+      id: "clk",
+      name: "Duckkick",
+      startup: 5,
+      active: 3,
+      recovery: 9,
+      damage: 32,
+      hitstun: 11,
+      blockstun: 8,
+      hitstop: 3,
+      pushback: 30,
+      knockback: 0,
+      launch: 0,
+      category: "LOW",
+      hitboxes: [{ x: 45, y: 10, w: 110, h: 45 }],
+      meterGainOnHit: 24,
+      meterGainOnBlock: 10,
+      meterCost: 0,
+      chip: 0,
+      knockdown: false,
+      allowed: GROUND,
+      cancels: { hit: hitCancels },
+      airOk: false,
+      lowPose: true,
+      animation: "kick",
+    },
+    chp: {
+      id: "chp",
+      name: "Uppåtstöt",
+      startup: 8,
+      active: 4,
+      recovery: 14,
+      damage: 70,
+      hitstun: 16,
+      blockstun: 11,
+      hitstop: 5,
+      pushback: 50,
+      knockback: 20,
+      launch: 40,
+      category: "MID",
+      hitboxes: [{ x: 35, y: 90, w: 90, h: 160 }],
+      meterGainOnHit: 40,
+      meterGainOnBlock: 16,
+      meterCost: 0,
+      chip: 0,
+      knockdown: false,
+      allowed: GROUND,
+      cancels: { hit: hitCancels.filter((id) => id.includes("super") || id.includes("upper") || id.includes("grab")) },
+      airOk: false,
+      lowPose: true,
+      animation: "punch_heavy",
+    },
+    chk: {
+      id: "chk",
+      name: "Svep",
+      startup: 9,
+      active: 4,
+      recovery: 18,
+      damage: 72,
+      hitstun: 18,
+      blockstun: 10,
+      hitstop: 5,
+      pushback: 70,
+      knockback: 40,
+      launch: 8,
+      category: "LOW",
+      hitboxes: [{ x: 40, y: 8, w: 140, h: 50 }],
+      meterGainOnHit: 42,
+      meterGainOnBlock: 16,
+      meterCost: 0,
+      chip: 0,
+      knockdown: true,
+      allowed: GROUND,
+      cancels: {},
+      airOk: false,
+      lowPose: true,
+      animation: "kick",
+    },
+  };
+}

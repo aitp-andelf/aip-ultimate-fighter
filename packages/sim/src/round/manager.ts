@@ -153,6 +153,9 @@ export function startNextRound(state: MatchState): void {
   f0.airborne = false;
   f0.windowHits = 0;
   f0.lastConnect = null;
+  f0.dashTap = 0;
+  f0.dashBackTap = 0;
+  f0.dashLeft = 0;
 
   f1.x = 350;
   f1.y = 0;
@@ -172,6 +175,9 @@ export function startNextRound(state: MatchState): void {
   f1.airborne = false;
   f1.windowHits = 0;
   f1.lastConnect = null;
+  f1.dashTap = 0;
+  f1.dashBackTap = 0;
+  f1.dashLeft = 0;
 
   // Rule from DECISIONS.md: "Supermätare vid rond: nollställs till 0 vid varje ny rond"
   f0.meter = 0;

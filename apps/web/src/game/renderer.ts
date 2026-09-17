@@ -2,7 +2,14 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import type { CharacterDef } from "@aipuf/contracts";
-import type { FighterRuntime, MatchState, ProjectileRuntime } from "@aipuf/sim";
+import {
+  getHitboxes,
+  getHurtboxes,
+  getPushbox,
+  type FighterRuntime,
+  type MatchState,
+  type ProjectileRuntime,
+} from "@aipuf/sim";
 
 export interface RendererOptions {
   container: HTMLDivElement;
@@ -11,6 +18,15 @@ export interface RendererOptions {
 
 // 200 simulation subunits = 1.0 meter in 3D world (Street Fighter arcade scale)
 export const WORLD_SCALE = 1 / 200;
+
+/**
+ * Authored idle/walk clips face -Z after the Root X-90 bind.
+ * Camera sits at +Z, so yaw π turns them to look at the camera.
+ * A small extra turn (~30°) aims the chest at the opponent without going into
+ * profile — profile made the guard look like crossed arms.
+ */
+const AUTHORED_FACE_CAMERA = Math.PI;
+const AUTHORED_THREE_QUARTER = 0.55;
 
 interface LoadedFighterState {
   group: THREE.Group;
@@ -21,9 +37,31 @@ interface LoadedFighterState {
   currentAction: THREE.AnimationAction | null;
   currentState: string;
   isGltfLoaded: boolean;
+  loadEpoch: number;
   archetype: string;
   primaryColor: string;
   secondaryColor: string;
+  duckAmount: number;
+  duckBones: {
+    hip: THREE.Object3D;
+    waist: THREE.Object3D | null;
+    lThigh: THREE.Object3D | null;
+    rThigh: THREE.Object3D | null;
+    lCalf: THREE.Object3D | null;
+    rCalf: THREE.Object3D | null;
+    lFoot: THREE.Object3D | null;
+    rFoot: THREE.Object3D | null;
+    lUpper: THREE.Object3D | null;
+    rUpper: THREE.Object3D | null;
+    lFore: THREE.Object3D | null;
+    rFore: THREE.Object3D | null;
+  } | null;
+  authoredScale: number;
+}
+
+function isAuthoredFighterModel(url?: string): boolean {
+  if (!url) return false;
+  return !/RobotExpressive|Soldier|Xbot|Michelle/.test(url);
 }
 
 interface SparkParticle {
@@ -166,9 +204,13 @@ export class GameRenderer {
       currentAction: null,
       currentState: "",
       isGltfLoaded: false,
+      loadEpoch: 0,
       archetype: "shoto-a",
       primaryColor: "#2563eb",
       secondaryColor: "#60a5fa",
+      duckAmount: 0,
+      duckBones: null,
+      authoredScale: 1,
     };
 
     this.fighter1 = {
@@ -180,9 +222,13 @@ export class GameRenderer {
       currentAction: null,
       currentState: "",
       isGltfLoaded: false,
+      loadEpoch: 0,
       archetype: "zoner-a",
       primaryColor: "#dc2626",
       secondaryColor: "#f87171",
+      duckAmount: 0,
+      duckBones: null,
+      authoredScale: 1,
     };
 
     // Build procedural models immediately as zero-latency fallback
@@ -261,12 +307,30 @@ export class GameRenderer {
       char1.id
     );
 
-    this.fighter0.isGltfLoaded = true;
-    this.fighter1.isGltfLoaded = true;
+    this.fighter0.isGltfLoaded = false;
+    this.fighter1.isGltfLoaded = false;
+    this.fighter0.mixer = null;
+    this.fighter1.mixer = null;
+    if (this.fighter0.gltfRoot) {
+      this.fighter0.group.remove(this.fighter0.gltfRoot);
+      this.fighter0.gltfRoot = null;
+    }
+    if (this.fighter1.gltfRoot) {
+      this.fighter1.group.remove(this.fighter1.gltfRoot);
+      this.fighter1.gltfRoot = null;
+    }
+
+    if (isAuthoredFighterModel(char0.modelUrl)) {
+      void this.loadRiggedFighter(0, char0.modelUrl!);
+    }
+    if (isAuthoredFighterModel(char1.modelUrl)) {
+      void this.loadRiggedFighter(1, char1.modelUrl!);
+    }
   }
 
   private async loadRiggedFighter(slot: 0 | 1, url: string): Promise<void> {
     const fighter = slot === 0 ? this.fighter0 : this.fighter1;
+    const epoch = ++fighter.loadEpoch;
 
     try {
       let cached = gltfCache.get(url);
@@ -291,10 +355,9 @@ export class GameRenderer {
         cached = await loadPromise;
       }
 
-      // Clone scene with independent skeletal rig
-      const clonedScene = SkeletonUtils.clone(cached.scene) as THREE.Group;
+      if (epoch !== fighter.loadEpoch) return;
 
-      // Customize materials with fighter colors
+      const clonedScene = SkeletonUtils.clone(cached.scene) as THREE.Group;
       const primaryCol = new THREE.Color(fighter.primaryColor);
       const secondaryCol = new THREE.Color(fighter.secondaryColor);
 
@@ -308,19 +371,20 @@ export class GameRenderer {
 
           const mats = Array.isArray(child.material) ? child.material : [child.material];
           for (const mat of mats) {
-            mat.roughness = 0.35;
-            mat.metalness = 0.35;
-            const matName = (mat.name || "").toLowerCase();
-
-            if (matName.includes("main") || matName.includes("highlimbs") || !matName) {
-              mat.color = primaryCol;
-              mat.emissive = primaryCol.clone().multiplyScalar(0.15);
-            } else if (matName.includes("grey") || matName.includes("joints")) {
-              mat.color = secondaryCol;
-              mat.emissive = secondaryCol.clone().multiplyScalar(0.1);
-            } else if (matName.includes("black")) {
-              mat.color = new THREE.Color(0x1e293b);
+            const hasMap = Boolean(mat.map);
+            if (!hasMap) {
+              const matName = (mat.name || "").toLowerCase();
+              if (matName.includes("main") || matName.includes("highlimbs") || !matName) {
+                mat.color = primaryCol;
+                mat.emissive = primaryCol.clone().multiplyScalar(0.15);
+              } else if (matName.includes("grey") || matName.includes("joints")) {
+                mat.color = secondaryCol;
+                mat.emissive = secondaryCol.clone().multiplyScalar(0.1);
+              }
             }
+            mat.roughness = hasMap ? 0.55 : 0.35;
+            mat.metalness = hasMap ? 0.08 : 0.35;
+            mat.side = THREE.FrontSide;
           }
           child.castShadow = true;
           child.receiveShadow = true;
@@ -347,25 +411,11 @@ export class GameRenderer {
         size = box.getSize(new THREE.Vector3());
       }
 
-      const desiredHeight = 2.05;
-      let baseScale = desiredHeight / (size.y || 1);
-      if (baseScale < 0.0005 || baseScale > 200) {
-        if (url.includes("Soldier")) baseScale = 0.0112;
-        else if (url.includes("RobotExpressive")) baseScale = 0.428;
-        else if (url.includes("Xbot")) baseScale = 1.135;
-        else if (url.includes("Michelle")) baseScale = 1.23;
-        else baseScale = 1.0;
-      }
-
-      let archetypeScale = baseScale;
-      if (fighter.archetype.startsWith("grappler")) {
-        archetypeScale *= 1.15; // Capitan/Babas are bulkier grapplers
-      } else if (fighter.archetype.startsWith("zoner")) {
-        archetypeScale *= 0.95; // Femboyfippe/Stinkfiend are leaner
-      }
-
-      clonedScene.scale.set(archetypeScale, archetypeScale, archetypeScale);
-      clonedScene.rotation.y = Math.PI / 2; // Face towards opponent along X-axis
+      const desiredHeight = fighter.archetype.startsWith("hybrid") ? 1.92 : 2.0;
+      const baseScale = desiredHeight / (size.y || 1);
+      fighter.authoredScale = baseScale;
+      clonedScene.scale.set(baseScale, baseScale, baseScale);
+      clonedScene.rotation.y = 0;
       clonedScene.updateMatrixWorld(true);
 
       // Align bottom of feet firmly with stage floor (y = 0)
@@ -376,10 +426,13 @@ export class GameRenderer {
       const mixer = new THREE.AnimationMixer(clonedScene);
       const actions: Record<string, THREE.AnimationAction> = {};
       for (const clip of cached.animations) {
-        actions[clip.name.toLowerCase()] = mixer.clipAction(clip);
+        const action = mixer.clipAction(clip);
+        const key = clip.name.toLowerCase();
+        actions[key] = action;
+        const short = key.split("|").pop();
+        if (short && !actions[short]) actions[short] = action;
       }
 
-      // Remove existing gltf root if any
       if (fighter.gltfRoot) {
         fighter.group.remove(fighter.gltfRoot);
       }
@@ -387,7 +440,28 @@ export class GameRenderer {
       fighter.gltfRoot = clonedScene;
       fighter.mixer = mixer;
       fighter.actions = actions;
+      fighter.currentAction = null;
+      fighter.currentState = "";
       fighter.isGltfLoaded = true;
+      fighter.duckAmount = 0;
+      const bone = (name: string) => clonedScene.getObjectByName(name) ?? null;
+      const hip = bone("Hip") ?? bone("Pelvis") ?? bone("hips");
+      fighter.duckBones = hip
+        ? {
+            hip,
+            waist: bone("Waist") ?? bone("Spine01"),
+            lThigh: bone("L_Thigh") ?? bone("LeftUpLeg"),
+            rThigh: bone("R_Thigh") ?? bone("RightUpLeg"),
+            lCalf: bone("L_Calf") ?? bone("LeftLeg"),
+            rCalf: bone("R_Calf") ?? bone("RightLeg"),
+            lFoot: bone("L_Foot") ?? bone("LeftFoot") ?? bone("L_Toe"),
+            rFoot: bone("R_Foot") ?? bone("RightFoot") ?? bone("R_Toe"),
+            lUpper: bone("L_Upperarm") ?? bone("LeftArm"),
+            rUpper: bone("R_Upperarm") ?? bone("RightArm"),
+            lFore: bone("L_Forearm") ?? bone("LeftForeArm"),
+            rFore: bone("R_Forearm") ?? bone("RightForeArm"),
+          }
+        : null;
       fighter.group.add(clonedScene);
 
       // Hide procedural parts once real 3D rigged model is ready
@@ -395,7 +469,7 @@ export class GameRenderer {
         fighter.proceduralParts.root.visible = false;
       }
     } catch {
-      // In offline / fallback environment, procedural model stays active seamlessly
+      if (epoch !== fighter.loadEpoch) return;
       fighter.isGltfLoaded = false;
       if (fighter.proceduralParts) {
         fighter.proceduralParts.root.visible = true;
@@ -571,34 +645,8 @@ export class GameRenderer {
     this.fighter1.group.position.set(pos1X, pos1Y, 0);
     this.fighter1.group.scale.set(1, 1, 1);
 
-    // Orientation & dynamic ground contact shadow
-    if (this.fighter0.proceduralParts) {
-      if (f0.state === "victory") {
-        this.fighter0.proceduralParts.root.rotation.y = -Math.PI / 2;
-      } else {
-        this.fighter0.proceduralParts.root.rotation.y = f0.facing === 1 ? -0.28 : Math.PI + 0.28;
-      }
-      const s0 = this.fighter0.proceduralParts.shadow;
-      s0.position.set(pos0X, 0.005, 0);
-      const jump0 = Math.max(0, pos0Y);
-      const scale0 = Math.max(0.45, 1.0 - jump0 * 0.25);
-      s0.scale.set(scale0, scale0, 1);
-      (s0.material as THREE.MeshBasicMaterial).opacity = Math.max(0.12, 0.60 - jump0 * 0.15);
-    }
-
-    if (this.fighter1.proceduralParts) {
-      if (f1.state === "victory") {
-        this.fighter1.proceduralParts.root.rotation.y = -Math.PI / 2;
-      } else {
-        this.fighter1.proceduralParts.root.rotation.y = f1.facing === 1 ? -0.28 : Math.PI + 0.28;
-      }
-      const s1 = this.fighter1.proceduralParts.shadow;
-      s1.position.set(pos1X, 0.005, 0);
-      const jump1 = Math.max(0, pos1Y);
-      const scale1 = Math.max(0.45, 1.0 - jump1 * 0.25);
-      s1.scale.set(scale1, scale1, 1);
-      (s1.material as THREE.MeshBasicMaterial).opacity = Math.max(0.12, 0.60 - jump1 * 0.15);
-    }
+    this.orientFighter(this.fighter0, f0, pos0X, pos0Y);
+    this.orientFighter(this.fighter1, f1, pos1X, pos1Y);
 
     // Hit-stop freeze frame check
     const isFrozen = this.hitFreezeFrames > 0;
@@ -607,19 +655,20 @@ export class GameRenderer {
     }
 
     // Animate fighters
-    this.updateFighterAnimation(this.fighter0, f0, isFrozen ? 0 : dt);
-    this.updateFighterAnimation(this.fighter1, f1, isFrozen ? 0 : dt);
+    this.updateFighterAnimation(this.fighter0, f0, isFrozen ? 0 : dt, state.chars[0]);
+    this.updateFighterAnimation(this.fighter1, f1, isFrozen ? 0 : dt, state.chars[1]);
 
     // Camera follow midpoint with authentic Street Fighter framing
     const midX = (pos0X + pos1X) / 2;
     const dist = Math.abs(pos0X - pos1X);
-    const targetCamX = Math.max(-2.5, Math.min(2.5, midX));
-    const targetCamZ = Math.max(4.2, Math.min(6.8, 3.6 + dist * 0.52));
-    const targetCamY = 1.35 + Math.max(pos0Y, pos1Y) * 0.35;
+    const peakY = Math.max(pos0Y, pos1Y);
+    const targetCamX = Math.max(-3.4, Math.min(3.4, midX));
+    const targetCamZ = Math.max(4.2, Math.min(7.2, 3.6 + dist * 0.52));
+    const targetCamY = 1.4 + peakY * 0.72;
 
-    this.camera.position.x += (targetCamX - this.camera.position.x) * 0.14;
-    this.camera.position.z += (targetCamZ - this.camera.position.z) * 0.14;
-    this.camera.position.y += (targetCamY - this.camera.position.y) * 0.14;
+    this.camera.position.x += (targetCamX - this.camera.position.x) * 0.16;
+    this.camera.position.z += (targetCamZ - this.camera.position.z) * 0.16;
+    this.camera.position.y += (targetCamY - this.camera.position.y) * 0.18;
 
     // Apply Screen Shake
     if (this.screenShake > 0.001) {
@@ -630,7 +679,7 @@ export class GameRenderer {
       this.screenShake = 0;
     }
 
-    this.camera.lookAt(this.camera.position.x, 1.15 + Math.max(pos0Y, pos1Y) * 0.25, 0);
+    this.camera.lookAt(this.camera.position.x, 1.2 + Math.max(pos0Y, pos1Y) * 0.5, 0);
 
     // Subtle parallax shift for background backdrop
     if (this.bgMeshBack) {
@@ -734,19 +783,67 @@ export class GameRenderer {
 
   // --- Fighter Animation Driving ---
 
-  private updateFighterAnimation(fighter: LoadedFighterState, runtime: FighterRuntime, dt: number): void {
+  private updateFighterAnimation(
+    fighter: LoadedFighterState,
+    runtime: FighterRuntime,
+    dt: number,
+    char: CharacterDef
+  ): void {
     if (fighter.isGltfLoaded && fighter.mixer) {
-      // Drive skeletal animation mixer
+      this.playRiggedAnimation(fighter, runtime, char);
       fighter.mixer.update(dt);
-      this.playRiggedAnimation(fighter, runtime.state, runtime.moveId);
+      this.applyAuthoredDuck(fighter, runtime, char, dt);
     } else if (fighter.proceduralParts) {
-      // Fallback: drive procedural skeleton
       this.poseProceduralFighter(fighter.proceduralParts, runtime);
     }
   }
 
-  private playRiggedAnimation(fighter: LoadedFighterState, state: string, moveId: string | null = null): void {
-    const stateKey = `${state}:${moveId || ""}`;
+  private fighterYaw(fighter: LoadedFighterState, runtime: FighterRuntime): number {
+    const authored = Boolean(fighter.gltfRoot && fighter.isGltfLoaded);
+    if (authored) {
+      if (runtime.state === "victory") return AUTHORED_FACE_CAMERA;
+      return runtime.facing === 1
+        ? -AUTHORED_FACE_CAMERA + AUTHORED_THREE_QUARTER
+        : AUTHORED_FACE_CAMERA - AUTHORED_THREE_QUARTER;
+    }
+    if (runtime.state === "victory") return -Math.PI / 2;
+    return runtime.facing === 1 ? -0.28 : Math.PI + 0.28;
+  }
+
+  private orientFighter(
+    fighter: LoadedFighterState,
+    runtime: FighterRuntime,
+    posX: number,
+    posY: number
+  ): void {
+    const yaw = this.fighterYaw(fighter, runtime);
+    if (fighter.gltfRoot && fighter.isGltfLoaded) {
+      const s = fighter.authoredScale || 1;
+      fighter.gltfRoot.rotation.y = yaw;
+      fighter.gltfRoot.scale.set(s, s, s);
+    }
+    if (fighter.proceduralParts) {
+      fighter.proceduralParts.root.rotation.y = yaw;
+      const shadow = fighter.proceduralParts.shadow;
+      shadow.position.set(posX, 0.005, 0);
+      const jump = Math.max(0, posY);
+      const scale = Math.max(0.45, 1.0 - jump * 0.25);
+      shadow.scale.set(scale, scale, 1);
+      (shadow.material as THREE.MeshBasicMaterial).opacity = Math.max(0.12, 0.6 - jump * 0.15);
+    }
+  }
+
+  private playRiggedAnimation(
+    fighter: LoadedFighterState,
+    runtime: FighterRuntime,
+    char: CharacterDef
+  ): void {
+    const state = runtime.state;
+    const moveId = runtime.moveId;
+    const isAttack =
+      state === "attackStartup" || state === "attackActive" || state === "attackRecovery";
+    const isAir = state === "jump" || state === "fall" || state === "jumpStartup";
+    const stateKey = isAttack ? `attack:${moveId || ""}` : isAir ? "air" : `${state}:${moveId || ""}`;
     if (fighter.currentState === stateKey) return;
     fighter.currentState = stateKey;
 
@@ -758,68 +855,156 @@ export class GameRenderer {
       return null;
     };
 
+    const fitCycle = (action: THREE.AnimationAction | null, seconds: number) => {
+      if (!action) return 1;
+      return action.getClip().duration / Math.max(seconds, 0.08);
+    };
+
     let targetAction: THREE.AnimationAction | null = null;
     let timeScale = 1.0;
+    let loopOnce = false;
+    let fade = 0.1;
+    let startOffset = 0;
 
     switch (state) {
       case "idle":
         targetAction = findAction("idle", "standing");
+        timeScale = fitCycle(targetAction, 1.85);
         break;
-      case "walkForward":
-        targetAction = findAction("walking", "walk", "running");
+      case "walkForward": {
+        targetAction = findAction("walk", "walking", "running");
+        const mps = Math.max(0.45, Math.abs(runtime.vx) * WORLD_SCALE * 60);
+        timeScale = fitCycle(targetAction, 1.25 / mps);
+        fade = 0.12;
         break;
-      case "walkBackward":
-        targetAction = findAction("walking", "walk");
-        timeScale = -0.75;
+      }
+      case "walkBackward": {
+        // Always face the opponent: play the forward walk reversed (backstep), never turn-around clips.
+        targetAction = findAction("walk", "walking", "running");
+        const mps = Math.max(0.4, Math.abs(runtime.vx) * WORLD_SCALE * 60);
+        timeScale = -fitCycle(targetAction, 1.2 / mps);
+        fade = 0.12;
         break;
+      }
       case "dash":
-        targetAction = findAction("running", "run", "walking");
-        timeScale = 1.3;
+        targetAction = findAction("walk", "running", "run");
+        timeScale = fitCycle(targetAction, 0.72);
         break;
       case "crouch":
       case "crouchBlock":
-        targetAction = findAction("sitting", "sneak_pose", "idle");
+        // Authored "crouch" clips are sit/fish/crawl. Duck pose is applied after mixer.update.
+        targetAction = findAction("idle", "standing");
+        timeScale = fitCycle(targetAction, 1.6);
         break;
       case "jump":
       case "fall":
+      case "jumpStartup":
         targetAction = findAction("jump", "walkjump");
+        timeScale = fitCycle(targetAction, 0.55);
+        loopOnce = true;
+        fade = 0.05;
         break;
       case "standBlock":
-        targetAction = findAction("no", "headshake", "idle");
+      case "blockstun":
+        targetAction = findAction("block", "idle");
+        timeScale = fitCycle(targetAction, 1.4);
+        break;
+      case "throw":
+        targetAction = findAction("special", "punch_heavy", "punch");
+        loopOnce = true;
+        fade = 0.04;
+        break;
+      case "thrown":
+        targetAction = findAction("hit", "knockdown", "ko");
+        loopOnce = true;
+        fade = 0.04;
+        break;
+      case "wakeup":
+      case "landing":
+        targetAction = findAction("idle", "crouch");
         break;
       case "attackStartup":
       case "attackActive":
       case "attackRecovery": {
         const move = moveId || "";
-        const isKick = move === "lk" || move === "hk" || move.includes("kick") || move.includes("stomp") || move.includes("sweep") || move.includes("boot") || move.includes("shin") || move.includes("heel");
-        const isSuper = move.includes("super") || move.includes("overdrive") || move.includes("biohazard") || move.includes("velocity") || move.includes("grid");
+        const isKick =
+          move === "lk" ||
+          move === "hk" ||
+          move.includes("kick") ||
+          move.includes("stomp") ||
+          move.includes("sweep") ||
+          move.includes("boot") ||
+          move.includes("shin") ||
+          move.includes("heel") ||
+          move.includes("knee") ||
+          move.includes("dive");
+        const isSuper =
+          move.includes("super") ||
+          move.includes("overdrive") ||
+          move.includes("biohazard") ||
+          move.includes("speciale") ||
+          move.includes("hulk") ||
+          move.includes("vision") ||
+          move.includes("velocity");
+        const isSpecial =
+          move.includes("hawaii") ||
+          move.includes("blast") ||
+          move.includes("roll") ||
+          move.includes("laser") ||
+          move.includes("entry") ||
+          move.includes("grid") ||
+          move.includes("silent") ||
+          move.includes("cardiac") ||
+          move.includes("fedora") ||
+          move.includes("lasik") ||
+          move.includes("firewall") ||
+          move.includes("thunder") ||
+          move.includes("uppercut") ||
+          move.includes("lightning") ||
+          move.includes("trap") ||
+          move.includes("breaker");
+        const isHeavy = move === "hp" || move === "hk" || move.includes("hammer") || move.includes("smash");
 
         if (isSuper) {
-          targetAction = findAction("thumbsup", "dance", "agree", "punch");
-          timeScale = 1.6;
+          targetAction = findAction("super", "special", "punch_heavy", "punch");
+        } else if (isSpecial) {
+          targetAction = findAction("special", "punch_heavy", "punch");
         } else if (isKick) {
-          targetAction = findAction("running", "walkjump", "jump", "punch");
-          timeScale = 1.7;
+          targetAction = findAction("kick", "punch");
+        } else if (isHeavy) {
+          targetAction = findAction("punch_heavy", "punch");
         } else {
-          targetAction = findAction("punch", "agree", "running");
-          timeScale = 1.5;
+          targetAction = findAction("punch", "kick");
         }
+        loopOnce = true;
+        fade = 0.04;
+        const def = moveId ? char.moves[moveId] : undefined;
+        const startup = Math.max(def?.startup ?? 5, 1);
+        const totalSec = def ? (def.startup + def.active + def.recovery) / 60 : 0.35;
+        const clipDur = targetAction?.getClip().duration ?? totalSec;
+        const impactAt = Math.min(0.36, clipDur * 0.42);
+        const windupAt = Math.max(0, impactAt - 0.11);
+        timeScale = ((impactAt - windupAt) * 60) / startup;
+        startOffset = windupAt;
         break;
       }
       case "hitstun":
-        targetAction = findAction("no", "headshake");
-        timeScale = 1.5;
+        targetAction = findAction("hit", "no", "headshake");
+        loopOnce = true;
+        fade = 0.04;
+        timeScale = fitCycle(targetAction, 0.28);
         break;
       case "knockdown":
+        targetAction = findAction("knockdown", "ko", "death");
+        loopOnce = true;
+        break;
       case "ko":
-        targetAction = findAction("death", "sad_pose");
-        if (targetAction) {
-          targetAction.clampWhenFinished = true;
-          targetAction.loop = THREE.LoopOnce;
-        }
+        targetAction = findAction("ko", "knockdown", "death");
+        loopOnce = true;
         break;
       case "victory":
-        targetAction = findAction("dance", "thumbsup", "wave", "agree");
+        targetAction = findAction("victory", "idle");
+        loopOnce = true;
         break;
       default:
         targetAction = findAction("idle");
@@ -827,10 +1012,68 @@ export class GameRenderer {
 
     if (targetAction && targetAction !== fighter.currentAction) {
       if (fighter.currentAction) {
-        fighter.currentAction.fadeOut(0.08);
+        fighter.currentAction.fadeOut(fade);
       }
-      targetAction.reset().setEffectiveTimeScale(timeScale).fadeIn(0.08).play();
+      targetAction.reset();
+      targetAction.setEffectiveTimeScale(timeScale);
+      targetAction.clampWhenFinished = loopOnce;
+      targetAction.loop = loopOnce ? THREE.LoopOnce : THREE.LoopRepeat;
+      if (startOffset > 0) targetAction.time = startOffset;
+      targetAction.fadeIn(fade).play();
       fighter.currentAction = targetAction;
+    } else if (targetAction) {
+      targetAction.setEffectiveTimeScale(timeScale);
+    }
+  }
+
+  /** Authored idle/walk retarget wraps both hands across the chest. Uncross, then squat. */
+  private applyAuthoredDuck(
+    fighter: LoadedFighterState,
+    runtime: FighterRuntime,
+    char: CharacterDef,
+    dt: number
+  ): void {
+    const bones = fighter.duckBones;
+    if (!bones) return;
+
+    const attacking =
+      runtime.state === "attackStartup" ||
+      runtime.state === "attackActive" ||
+      runtime.state === "attackRecovery";
+    if (!attacking) {
+      bones.lUpper?.rotateX(-0.52);
+      bones.rUpper?.rotateX(-0.52);
+      bones.lFore?.rotateX(-0.35);
+      bones.rFore?.rotateX(-0.35);
+    }
+
+    const move = runtime.moveId ? char.moves[runtime.moveId] : undefined;
+    const wantDuck =
+      runtime.state === "crouch" ||
+      runtime.state === "crouchBlock" ||
+      Boolean(move?.lowPose && runtime.state.startsWith("attack"));
+
+    const target = wantDuck ? 1 : 0;
+    const k = 1 - Math.exp(-14 * Math.max(dt, 0));
+    fighter.duckAmount += (target - fighter.duckAmount) * k;
+    const d = fighter.duckAmount;
+    if (d < 0.01) return;
+
+    // Root X-90: Hip local Z is world up. Flex thighs then plant feet — never squash.
+    bones.lThigh?.rotateX(-0.79 * d);
+    bones.rThigh?.rotateX(-0.79 * d);
+
+    bones.hip.updateWorldMatrix(true, true);
+    const s = fighter.authoredScale || 1;
+    const world = new THREE.Vector3();
+    let minY = Infinity;
+    for (const foot of [bones.lFoot, bones.rFoot]) {
+      if (!foot) continue;
+      foot.getWorldPosition(world);
+      if (world.y < minY) minY = world.y;
+    }
+    if (Number.isFinite(minY)) {
+      bones.hip.position.z -= THREE.MathUtils.clamp(minY / s, -0.08, 0.12);
     }
   }
 
@@ -2295,43 +2538,41 @@ export class GameRenderer {
   private renderDebugBoxes(state: MatchState): void {
     this.debugBoxGroup.clear();
 
-    const lineMatRed = new THREE.LineBasicMaterial({ color: 0xff0000 });
-    const lineMatGreen = new THREE.LineBasicMaterial({ color: 0x00ff00 });
-    const lineMatYellow = new THREE.LineBasicMaterial({ color: 0xffff00 });
+    const lineMatRed = new THREE.LineBasicMaterial({ color: 0xff3333, depthTest: false });
+    const lineMatGreen = new THREE.LineBasicMaterial({ color: 0x22ff66, depthTest: false });
+    const lineMatYellow = new THREE.LineBasicMaterial({ color: 0xffee33, depthTest: false });
 
     for (let i = 0; i < 2; i++) {
       const f = state.fighters[i]!;
       const char = state.chars[i]!;
 
-      // Pushbox (yellow)
-      const pw = char.pushbox.w * WORLD_SCALE;
-      const ph = char.pushbox.h * WORLD_SCALE;
-      const px = f.x * WORLD_SCALE;
-      const py = f.y * WORLD_SCALE + ph / 2;
-      this.drawBoxOutline(px, py, pw, ph, lineMatYellow);
+      const push = getPushbox(f, char);
+      this.drawBoxOutline(
+        (push.x + push.w / 2) * WORLD_SCALE,
+        (push.y + push.h / 2) * WORLD_SCALE,
+        push.w * WORLD_SCALE,
+        push.h * WORLD_SCALE,
+        lineMatYellow
+      );
 
-      // Hurtboxes (green)
-      const hurt = f.y > 0 ? char.hurtAir : f.state === "crouch" ? char.hurtCrouch : char.hurtStand;
-      for (const b of hurt) {
-        const bw = b.w * WORLD_SCALE;
-        const bh = b.h * WORLD_SCALE;
-        const bx = f.x * WORLD_SCALE + (f.facing === 1 ? b.x * WORLD_SCALE + bw / 2 : -(b.x * WORLD_SCALE + bw / 2));
-        const by = f.y * WORLD_SCALE + b.y * WORLD_SCALE + bh / 2;
-        this.drawBoxOutline(bx, by, bw, bh, lineMatGreen);
+      for (const b of getHurtboxes(f, char)) {
+        this.drawBoxOutline(
+          (b.x + b.w / 2) * WORLD_SCALE,
+          (b.y + b.h / 2) * WORLD_SCALE,
+          b.w * WORLD_SCALE,
+          b.h * WORLD_SCALE,
+          lineMatGreen
+        );
       }
 
-      // Hitboxes (red)
-      if (f.state === "attackActive" && f.moveId) {
-        const move = char.moves[f.moveId];
-        if (move) {
-          for (const h of move.hitboxes) {
-            const hw = h.w * WORLD_SCALE;
-            const hh = h.h * WORLD_SCALE;
-            const hx = f.x * WORLD_SCALE + (f.facing === 1 ? h.x * WORLD_SCALE + hw / 2 : -(h.x * WORLD_SCALE + hw / 2));
-            const hy = f.y * WORLD_SCALE + h.y * WORLD_SCALE + hh / 2;
-            this.drawBoxOutline(hx, hy, hw, hh, lineMatRed);
-          }
-        }
+      for (const h of getHitboxes(f, char)) {
+        this.drawBoxOutline(
+          (h.x + h.w / 2) * WORLD_SCALE,
+          (h.y + h.h / 2) * WORLD_SCALE,
+          h.w * WORLD_SCALE,
+          h.h * WORLD_SCALE,
+          lineMatRed
+        );
       }
     }
   }
@@ -2346,11 +2587,11 @@ export class GameRenderer {
     const hw = w / 2;
     const hh = h / 2;
     const points = [
-      new THREE.Vector3(cx - hw, cy - hh, 0.05),
-      new THREE.Vector3(cx + hw, cy - hh, 0.05),
-      new THREE.Vector3(cx + hw, cy + hh, 0.05),
-      new THREE.Vector3(cx - hw, cy + hh, 0.05),
-      new THREE.Vector3(cx - hw, cy - hh, 0.05),
+      new THREE.Vector3(cx - hw, cy - hh, 0.35),
+      new THREE.Vector3(cx + hw, cy - hh, 0.35),
+      new THREE.Vector3(cx + hw, cy + hh, 0.35),
+      new THREE.Vector3(cx - hw, cy + hh, 0.35),
+      new THREE.Vector3(cx - hw, cy - hh, 0.35),
     ];
     const geo = new THREE.BufferGeometry().setFromPoints(points);
     const line = new THREE.Line(geo, material);

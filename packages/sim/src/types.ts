@@ -81,6 +81,9 @@ export interface FighterRuntime {
   lastConnect: "hit" | "block" | "whiff" | null;
   windowHits: number;
   landingLock: number;
+  dashTap: number;
+  dashBackTap: number;
+  dashLeft: number;
 }
 
 export interface RoundRuntime {
@@ -153,5 +156,8 @@ export function emptyFighter(id: 0 | 1, x: number, facing: 1 | -1): FighterRunti
     lastConnect: null,
     windowHits: 0,
     landingLock: 0,
+    dashTap: 0,
+    dashBackTap: 0,
+    dashLeft: 0,
   };
 }

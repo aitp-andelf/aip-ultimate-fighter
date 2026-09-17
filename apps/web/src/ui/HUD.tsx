@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import type { CharacterDef } from "@aipuf/contracts";
 import type { MatchState } from "@aipuf/sim";
+import { FighterPortrait } from "./FighterPortrait.tsx";
 
 interface HudProps {
   state: MatchState;
@@ -78,9 +79,7 @@ export const HUD: React.FC<HudProps> = ({
         <div className="flex flex-1 items-center gap-3 pr-4">
           {/* Fighter Avatar Portrait */}
           <div className="relative flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-blue-400 bg-gradient-to-br from-blue-900 to-slate-950 shadow-[0_0_15px_rgba(59,130,246,0.5)]">
-            <span className="text-2xl font-black text-blue-300">
-              {p1Char.name.charAt(0)}
-            </span>
+            <FighterPortrait char={p1Char} className="absolute inset-0" imgClassName="h-full w-full object-cover object-[center_12%]" />
             <div className="absolute bottom-0 inset-x-0 bg-blue-600/80 py-0.5 text-center text-[9px] font-black uppercase text-white">
               P1
             </div>
@@ -191,9 +190,7 @@ export const HUD: React.FC<HudProps> = ({
 
           {/* Fighter Avatar Portrait P2 */}
           <div className="relative flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-rose-400 bg-gradient-to-bl from-rose-900 to-slate-950 shadow-[0_0_15px_rgba(244,63,94,0.5)]">
-            <span className="text-2xl font-black text-rose-300">
-              {p2Char.name.charAt(0)}
-            </span>
+            <FighterPortrait char={p2Char} className="absolute inset-0" imgClassName="h-full w-full object-cover object-[center_12%]" />
             <div className="absolute bottom-0 inset-x-0 bg-rose-600/80 py-0.5 text-center text-[9px] font-black uppercase text-white">
               P2
             </div>

@@ -39,7 +39,7 @@ import { emptyFighter } from "../types.ts";
 export function createInitialMatchState(config: MatchConfig): MatchState {
   const leftBound = config.leftBound ?? -1200;
   const rightBound = config.rightBound ?? 1200;
-  const gravity = config.gravity ?? 6;
+  const gravity = config.gravity ?? 4;
 
   const f0 = emptyFighter(0, -350, 1);
   const f1 = emptyFighter(1, 350, -1);
@@ -139,6 +139,7 @@ function processFighterAction(
     fighter.state === "idle" ||
     fighter.state === "walkForward" ||
     fighter.state === "walkBackward" ||
+    fighter.state === "dash" ||
     fighter.state === "crouch";
 
   const canCancel =
@@ -157,6 +158,7 @@ function processFighterAction(
     (fighter.state === "idle" ||
       fighter.state === "walkForward" ||
       fighter.state === "walkBackward" ||
+      fighter.state === "dash" ||
       fighter.state === "crouch");
 
   if (isCurrentlyAbleToMove && state.round.phase === "fighting") {
@@ -233,30 +235,37 @@ function tryExecuteMove(
     }
   }
 
-  // 5. AIR ATTACK
+  // 5. AIR ATTACK — jump kick vs jump punch
   if (inAir) {
-    if (
-      hasBufferedEdge(fighter, Buttons.HP) ||
-      hasBufferedEdge(fighter, Buttons.LP) ||
-      hasBufferedEdge(fighter, Buttons.HK) ||
-      hasBufferedEdge(fighter, Buttons.LK)
-    ) {
-      const airMove = char.moves[char.normals.air];
-      if (airMove && fighter.state !== "attackStartup" && fighter.state !== "attackActive" && fighter.state !== "attackRecovery") {
-        consumeBufferedEdge(fighter, Buttons.HP);
-        consumeBufferedEdge(fighter, Buttons.LP);
-        consumeBufferedEdge(fighter, Buttons.HK);
-        consumeBufferedEdge(fighter, Buttons.LK);
-        startMove(fighter, airMove, state);
-        return;
+    const wantKick = hasBufferedEdge(fighter, Buttons.LK) || hasBufferedEdge(fighter, Buttons.HK);
+    const wantPunch = hasBufferedEdge(fighter, Buttons.LP) || hasBufferedEdge(fighter, Buttons.HP);
+    if (wantKick || wantPunch) {
+      const alreadyAttacking =
+        fighter.state === "attackStartup" ||
+        fighter.state === "attackActive" ||
+        fighter.state === "attackRecovery";
+      if (!alreadyAttacking) {
+        const airMove = wantKick
+          ? char.moves[char.normals.air]
+          : (char.moves.air_punch ?? char.moves[char.normals.air]);
+        if (airMove) {
+          consumeBufferedEdge(fighter, Buttons.HP);
+          consumeBufferedEdge(fighter, Buttons.LP);
+          consumeBufferedEdge(fighter, Buttons.HK);
+          consumeBufferedEdge(fighter, Buttons.LK);
+          startMove(fighter, airMove, state);
+          return;
+        }
       }
     }
     return;
   }
 
-  // 6. GROUND NORMALS
+  const crouching = isButtonHeld(fighter, Buttons.DOWN);
+
+  // 6. GROUND NORMALS — ducking variants when holding down
   if (hasBufferedEdge(fighter, Buttons.HP)) {
-    const move = char.moves[char.normals.hp];
+    const move = pickGroundNormal(char, "hp", crouching);
     if (move && (canAct || (canCancel && canCancelInto(fighter, char, move.id)))) {
       consumeBufferedEdge(fighter, Buttons.HP);
       startMove(fighter, move, state);
@@ -265,7 +274,7 @@ function tryExecuteMove(
   }
 
   if (hasBufferedEdge(fighter, Buttons.HK)) {
-    const move = char.moves[char.normals.hk];
+    const move = pickGroundNormal(char, "hk", crouching);
     if (move && (canAct || (canCancel && canCancelInto(fighter, char, move.id)))) {
       consumeBufferedEdge(fighter, Buttons.HK);
       startMove(fighter, move, state);
@@ -274,7 +283,7 @@ function tryExecuteMove(
   }
 
   if (hasBufferedEdge(fighter, Buttons.LP)) {
-    const move = char.moves[char.normals.lp];
+    const move = pickGroundNormal(char, "lp", crouching);
     if (move && (canAct || (canCancel && canCancelInto(fighter, char, move.id)))) {
       consumeBufferedEdge(fighter, Buttons.LP);
       startMove(fighter, move, state);
@@ -283,13 +292,25 @@ function tryExecuteMove(
   }
 
   if (hasBufferedEdge(fighter, Buttons.LK)) {
-    const move = char.moves[char.normals.lk];
+    const move = pickGroundNormal(char, "lk", crouching);
     if (move && (canAct || (canCancel && canCancelInto(fighter, char, move.id)))) {
       consumeBufferedEdge(fighter, Buttons.LK);
       startMove(fighter, move, state);
       return;
     }
   }
+}
+
+function pickGroundNormal(
+  char: CharacterDef,
+  button: "lp" | "hp" | "lk" | "hk",
+  crouching: boolean
+) {
+  if (crouching) {
+    const crouchId = ({ lp: "clp", hp: "chp", lk: "clk", hk: "chk" } as const)[button];
+    if (char.moves[crouchId]) return char.moves[crouchId];
+  }
+  return char.moves[char.normals[button]];
 }
 
 function canCancelInto(
@@ -307,25 +328,36 @@ function canCancelInto(
   return allowedList.includes(targetMoveId);
 }
 
+const DASH_TAP_WINDOW = 12;
+const DASH_FRAMES = 14;
+const BACKDASH_FRAMES = 12;
+
 function handleMovementAndJumping(
   fighter: FighterRuntime,
   char: CharacterDef,
   state: MatchState
 ): void {
-  // Jump initiation
+  const fwd = fighter.facing === 1 ? Buttons.RIGHT : Buttons.LEFT;
+  const back = fighter.facing === 1 ? Buttons.LEFT : Buttons.RIGHT;
+  const dashSpeed = char.dashSpeed ?? Math.round(char.walkSpeed * 3.4);
+
+  if (fighter.dashTap > 0) fighter.dashTap--;
+  if (fighter.dashBackTap > 0) fighter.dashBackTap--;
+
+  // Jump (allowed from dash)
   if (hasBufferedEdge(fighter, Buttons.UP)) {
     consumeBufferedEdge(fighter, Buttons.UP);
+    const keepDash = fighter.state === "dash" ? fighter.vx : 0;
     fighter.state = "jumpStartup";
     fighter.stateTime = 0;
+    fighter.dashLeft = 0;
 
-    const movingForward =
-      (fighter.facing === 1 && isButtonHeld(fighter, Buttons.RIGHT)) ||
-      (fighter.facing === -1 && isButtonHeld(fighter, Buttons.LEFT));
-    const movingBackward =
-      (fighter.facing === 1 && isButtonHeld(fighter, Buttons.LEFT)) ||
-      (fighter.facing === -1 && isButtonHeld(fighter, Buttons.RIGHT));
+    const movingForward = isButtonHeld(fighter, fwd);
+    const movingBackward = isButtonHeld(fighter, back);
 
-    if (movingForward) {
+    if (keepDash !== 0) {
+      fighter.vx = keepDash;
+    } else if (movingForward) {
       fighter.vx = fighter.facing * char.walkSpeed;
     } else if (movingBackward) {
       fighter.vx = -fighter.facing * char.backWalkSpeed;
@@ -335,20 +367,53 @@ function handleMovementAndJumping(
     return;
   }
 
+  // Ongoing dash
+  if (fighter.state === "dash" && fighter.dashLeft > 0) {
+    fighter.dashLeft--;
+    fighter.stateTime++;
+    if (fighter.dashLeft <= 0) {
+      fighter.state = "idle";
+      fighter.vx = 0;
+    }
+    return;
+  }
+
   // Crouch
   if (isButtonHeld(fighter, Buttons.DOWN)) {
     fighter.state = "crouch";
     fighter.vx = 0;
+    fighter.dashLeft = 0;
     return;
   }
 
-  // Walk forward / backward
-  const movingForward =
-    (fighter.facing === 1 && isButtonHeld(fighter, Buttons.RIGHT)) ||
-    (fighter.facing === -1 && isButtonHeld(fighter, Buttons.LEFT));
-  const movingBackward =
-    (fighter.facing === 1 && isButtonHeld(fighter, Buttons.LEFT)) ||
-    (fighter.facing === -1 && isButtonHeld(fighter, Buttons.RIGHT));
+  const fwdEdge = hasBufferedEdge(fighter, fwd, 1);
+  const backEdge = hasBufferedEdge(fighter, back, 1);
+
+  if (fwdEdge && fighter.dashTap > 0) {
+    consumeBufferedEdge(fighter, fwd);
+    fighter.state = "dash";
+    fighter.stateTime = 0;
+    fighter.dashLeft = DASH_FRAMES;
+    fighter.dashTap = 0;
+    fighter.vx = fighter.facing * dashSpeed;
+    return;
+  }
+  if (backEdge && fighter.dashBackTap > 0) {
+    consumeBufferedEdge(fighter, back);
+    fighter.state = "dash";
+    fighter.stateTime = 0;
+    fighter.dashLeft = BACKDASH_FRAMES;
+    fighter.dashBackTap = 0;
+    fighter.vx = -fighter.facing * Math.round(dashSpeed * 0.85);
+    fighter.throwInvuln = Math.max(fighter.throwInvuln, 6);
+    return;
+  }
+
+  if (fwdEdge) fighter.dashTap = DASH_TAP_WINDOW;
+  if (backEdge) fighter.dashBackTap = DASH_TAP_WINDOW;
+
+  const movingForward = isButtonHeld(fighter, fwd);
+  const movingBackward = isButtonHeld(fighter, back);
 
   if (movingForward) {
     fighter.state = "walkForward";
